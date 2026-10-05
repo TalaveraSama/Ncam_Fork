@@ -122,7 +122,12 @@ Detalles completos en [`panel/README.md`](panel/README.md).
 
 ---
 
-## 3. Compilación del daemon
+## 3. Instalación completa
+
+Guía paso a paso (daemon + panel, con systemd y problemas frecuentes):
+[`INSTALL.md`](INSTALL.md).
+
+### Compilación del daemon
 
 Igual que el NCam original (Makefile / CMake con soporte de toolchains):
 

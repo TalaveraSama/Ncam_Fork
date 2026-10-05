@@ -53,22 +53,95 @@ def _webif_url(conn: Optional[sqlite3.Connection] = None) -> str:
     return url.rstrip("/")
 
 
+def _parse_digest_challenge(header: str) -> dict[str, str]:
+    """Extrae los parámetros de una cabecera ``WWW-Authenticate: Digest ...``."""
+    if not header or not header.lower().startswith("digest"):
+        return {}
+    challenge: dict[str, str] = {}
+    for part in header[len("Digest"):].split(","):
+        if "=" not in part:
+            continue
+        key, _, value = part.partition("=")
+        challenge[key.strip().lower()] = value.strip().strip('"')
+    return challenge
+
+
+def _digest_authorization(
+    username: str, password: str, method: str, uri: str, challenge: dict[str, str]
+) -> str:
+    """Calcula la cabecera de autenticación Digest (MD5) que espera el WebIf de NCam.
+
+    El daemon aplica RFC 2617 con ``qop="auth"`` y realm propio (``Forbidden``).
+    """
+    realm = challenge.get("realm", "")
+    nonce = challenge.get("nonce", "")
+    opaque = challenge.get("opaque", "")
+    qop = (challenge.get("qop") or "auth").split(",")[0].strip() or "auth"
+    algorithm = (challenge.get("algorithm") or "MD5").upper()
+
+    def _md5(data: str) -> str:
+        return hashlib.md5(data.encode("utf-8")).hexdigest()
+
+    cnonce = hashlib.md5(f"{time.time()}{nonce}{username}".encode()).hexdigest()[:16]
+    nc = "00000001"
+    ha1 = _md5(f"{username}:{realm}:{password}")
+    ha2 = _md5(f"{method}:{uri}")
+    if qop in ("auth", "auth-int"):
+        response = _md5(f"{ha1}:{nonce}:{nc}:{cnonce}:{qop}:{ha2}")
+    else:
+        response = _md5(f"{ha1}:{nonce}:{ha2}")
+
+    parts = [f'username="{username}"', f'realm="{realm}"', f'nonce="{nonce}"', f'uri="{uri}"']
+    if algorithm:
+        parts.append(f"algorithm={algorithm}")
+    if qop:
+        parts += [f"qop={qop}", f"nc={nc}", f'cnonce="{cnonce}"']
+    if opaque:
+        parts.append(f'opaque="{opaque}"')
+    parts.append(f'response="{response}"')
+    return "Digest " + ", ".join(parts)
+
+
 def _get_json(path: str, params: dict[str, str], timeout: Optional[float] = None,
               credentials: Optional[tuple[str, str]] = None,
               base_url: Optional[str] = None) -> dict[str, Any]:
     base = (base_url or _webif_url()).rstrip("/")
     query = "&".join(f"{quote(key)}={quote(value)}" for key, value in params.items())
     url = f"{base}{path}?{query}" if query else f"{base}{path}"
+    request_uri = f"{path}?{query}" if query else path
 
-    request = Request(url, headers={"Accept": "application/json", "User-Agent": "NCam-NG-Panel"})
-    if credentials and credentials[0]:
-        token = base64.b64encode(f"{credentials[0]}:{credentials[1]}".encode()).decode()
-        request.add_header("Authorization", f"Basic {token}")
+    def _fetch(authorization: Optional[str] = None) -> str:
+        request = Request(url, headers={"Accept": "application/json", "User-Agent": "NCam-NG-Panel"})
+        if authorization:
+            request.add_header("Authorization", authorization)
+        with urlopen(request, timeout=timeout or settings.ncam_timeout) as response:
+            return response.read().decode("utf-8", errors="replace")
 
     try:
-        with urlopen(request, timeout=timeout or settings.ncam_timeout) as response:
-            body = response.read().decode("utf-8", errors="replace")
+        if credentials and credentials[0]:
+            # el WebIf de NCam usa Digest MD5 (y Basic como alternativa en otras
+            # versiones): se prueba Basic y, si lo rechaza, se responde al reto
+            token = base64.b64encode(f"{credentials[0]}:{credentials[1]}".encode()).decode()
+            try:
+                body = _fetch(f"Basic {token}")
+            except HTTPError as exc:
+                challenge_header = exc.headers.get("WWW-Authenticate", "") if exc.headers else ""
+                if exc.code != 401 or not credentials[1]:
+                    raise
+                challenge = _parse_digest_challenge(challenge_header)
+                if not challenge:
+                    raise
+                digest = _digest_authorization(
+                    credentials[0], credentials[1], "GET", request_uri, challenge
+                )
+                body = _fetch(digest)
+        else:
+            body = _fetch()
     except HTTPError as exc:
+        if exc.code == 401:
+            raise NcamUnavailable(
+                "NCam WebIf rechazó las credenciales (revise usuario/contraseña del WebIf)"
+            ) from exc
         raise NcamUnavailable(f"NCam WebIf respondió HTTP {exc.code}") from exc
     except (URLError, socket.timeout, OSError) as exc:
         raise NcamUnavailable(f"No se pudo contactar el WebIf de NCam ({exc})") from exc

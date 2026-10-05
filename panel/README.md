@@ -10,10 +10,15 @@ créditos). Incluye además un rol de **usuario final** de solo lectura.
 * Integración: lee las métricas del **motor de caché v2** del daemon NCam a
   través de `/ncamapi.json?part=cachestats` y genera los bloques de
   configuración (`ncam.conf`, `ncam.user`, `ncam.server`).
+* Autenticación contra el WebIf: **Digest MD5** (la que usa NCam cuando se define
+  `httpuser`/`httppwd`) con Basic como alternativa.
 
 ---
 
 ## 1. Instalación
+
+> Guía completa (daemon + panel, systemd y problemas frecuentes) en
+> [`../INSTALL.md`](../INSTALL.md).
 
 ```bash
 cd panel

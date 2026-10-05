@@ -35,6 +35,16 @@
 * Opción `max_entries` añadida al ejemplo de configuración
   (`Distribution/doc/example/ncam.conf`).
 
+### Compatibilidad
+
+* El panel ahora negocia **autenticación Digest MD5** (la que usa el WebIf de NCam
+  cuando se define `httpuser`/`httppwd`): antes solo enviaba Basic y, con el WebIf
+  protegido, no podía leer el motor de caché. Incluye mensajes de error claros para
+  credenciales rechazadas y `GET /api/v1/health` informa la URL del WebIf realmente
+  en uso (la de los ajustes, no solo la del entorno).
+* Nueva guía [`INSTALL.md`](INSTALL.md) con la instalación completa (compilación,
+  configuración, systemd, actualizaciones y problemas frecuentes).
+
 ### Pruebas
 
 * `devtools/cache-engine-test.c` + `devtools/run-cache-test.sh`: compilan el motor
@@ -71,6 +81,6 @@
   del daemon y suspensión opcional por deuda.
 * El simulador `panel/tools/mock_ncam_webif.py` implementa también
   `part=userstats` con contadores crecientes, para probar la facturación sin daemon.
-* 60 pruebas automatizadas (`pytest`) de roles, líneas, créditos, caché, auditoría,
-  notificaciones y consumo.
+* 64 pruebas automatizadas (`pytest`) de roles, líneas, créditos, caché, auditoría,
+  notificaciones, consumo y autenticación Digest del WebIf.
 * `panel/tools/mock_ncam_webif.py`: simulador del WebIf para desarrollar sin daemon.

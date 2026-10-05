@@ -224,18 +224,23 @@ app.include_router(billing_router.router, prefix=API_PREFIX)
 def health():
     """Sonda de vida: el panel responde y el daemon NCam (si está) también."""
     db_ok = True
+    webif_url = settings.ncam_webif_url
+    ncam_state: dict[str, Any] = {"reachable": False}
     try:
         with database.session() as conn:
             conn.execute("SELECT 1")
-    except Exception:  # pragma: no cover - solo en fallos de disco
+            # la URL efectiva puede venir de los ajustes del panel
+            webif_url = ncam._webif_url(conn)
+            ncam_state = ncam.fetch_cache_stats(conn)
+    except Exception as exc:  # pragma: no cover - solo en fallos de disco
+        log.warning("health: no se pudo consultar el daemon: %s", exc)
         db_ok = False
-    ncam_state = ncam.fetch_cache_stats()
     return {
         "status": "ok" if db_ok else "degraded",
         "panel_version": settings.version,
         "database": "ok" if db_ok else "error",
         "ncam_reachable": bool(ncam_state.get("reachable")),
-        "ncam_url": settings.ncam_webif_url,
+        "ncam_url": webif_url,
     }
 
 
