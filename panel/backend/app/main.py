@@ -22,9 +22,10 @@ from fastapi.staticfiles import StaticFiles
 
 from . import db as database
 from . import ncam
+from . import notifications
 from .services import record_snapshot
 from .config import FRONTEND_DIR, settings
-from .routers import accounts, admin, auth, cache, lines, stats
+from .routers import accounts, admin, auth, cache, lines, notifications as notifications_router, stats
 
 
 log = logging.getLogger("ncam.panel")
@@ -34,6 +35,12 @@ async def _cache_sampler(stop_event: asyncio.Event) -> None:
     """Guarda una muestra de métricas de caché cada N segundos."""
     if not settings.ncam_poll_enabled:
         return
+    # deja terminar init_db() antes de escribir la primera muestra
+    try:
+        await asyncio.wait_for(stop_event.wait(), timeout=5)
+        return
+    except asyncio.TimeoutError:
+        pass
     while not stop_event.is_set():
         try:
             await asyncio.to_thread(_collect_snapshot)
@@ -43,6 +50,47 @@ async def _cache_sampler(stop_event: asyncio.Event) -> None:
             await asyncio.wait_for(stop_event.wait(), timeout=settings.ncam_poll_interval)
         except asyncio.TimeoutError:
             continue
+
+
+async def _expiry_notifier(stop_event: asyncio.Event) -> None:
+    """Revisa periódicamente las líneas por caducar y envía los avisos configurados.
+
+    Nunca debe tumbar el panel: cualquier error se registra y se espera al
+    siguiente ciclo.
+    """
+    if not settings.notify_enabled:
+        return
+    try:
+        await asyncio.wait_for(stop_event.wait(), timeout=10)
+        return
+    except asyncio.TimeoutError:
+        pass
+    while not stop_event.is_set():
+        interval = 3600
+        try:
+            interval = await asyncio.to_thread(_notify_once)
+        except Exception as exc:
+            log.warning("no se pudieron enviar los avisos de caducidad: %s", exc)
+        try:
+            await asyncio.wait_for(stop_event.wait(), timeout=interval)
+        except asyncio.TimeoutError:
+            continue
+
+
+def _notify_once() -> int:
+    """Ejecuta una pasada de avisos y devuelve el intervalo hasta la siguiente."""
+    with database.session() as conn:
+        conf = notifications.notification_settings(conn)
+        if conf["enabled"] and (conf["email_enabled"] or conf["telegram_enabled"]):
+            report = notifications.run_notifications(conn)
+            if report["sent"] or report["failed"]:
+                log.info(
+                    "avisos de caducidad: %s enviados, %s fallidos, %s omitidos",
+                    len(report["sent"]),
+                    len(report["failed"]),
+                    len(report["skipped"]),
+                )
+        return conf["interval_seconds"]
 
 
 def _collect_snapshot() -> None:
@@ -77,8 +125,11 @@ async def lifespan(app: FastAPI):
     database.init_db()
     stop_event = asyncio.Event()
     task: asyncio.Task | None = None
+    notifier: asyncio.Task | None = None
     if settings.ncam_poll_enabled:
         task = asyncio.create_task(_cache_sampler(stop_event))
+    if settings.notify_enabled:
+        notifier = asyncio.create_task(_expiry_notifier(stop_event))
     log.info(
         "NCam-NG Panel %s listo en http://%s:%s (NCam WebIf: %s)",
         settings.version,
@@ -90,10 +141,12 @@ async def lifespan(app: FastAPI):
         yield
     finally:
         stop_event.set()
-        if task:
-            task.cancel()
+        for pending in (task, notifier):
+            if not pending:
+                continue
+            pending.cancel()
             try:
-                await task
+                await pending
             except (asyncio.CancelledError, Exception):
                 pass
 
@@ -126,6 +179,7 @@ app.include_router(lines.router, prefix=API_PREFIX)
 app.include_router(cache.router, prefix=API_PREFIX)
 app.include_router(stats.router, prefix=API_PREFIX)
 app.include_router(admin.router, prefix=API_PREFIX)
+app.include_router(notifications_router.router, prefix=API_PREFIX)
 
 
 @app.get(f"{API_PREFIX}/health", tags=["meta"])

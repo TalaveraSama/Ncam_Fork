@@ -239,6 +239,7 @@ const NAV = [
   { id: "lines", label: "Líneas", icon: "▤", roles: ["super_admin", "reseller", "user"] },
   { id: "accounts", label: "Revendedores y usuarios", icon: "👥", roles: ["super_admin", "reseller"] },
   { id: "cache", label: "Caché y peers", icon: "⚡", roles: ["super_admin", "reseller"] },
+  { id: "notifications", label: "Avisos de caducidad", icon: "🔔", roles: ["super_admin", "reseller"] },
   { id: "stats", label: "Estadísticas", icon: "📈", roles: ["super_admin", "reseller", "user"] },
   { id: "transactions", label: "Créditos", icon: "🪙", roles: ["super_admin", "reseller", "user"] },
   { id: "audit", label: "Auditoría", icon: "🛡", roles: ["super_admin", "reseller"] },
@@ -529,6 +530,14 @@ function openLineForm(owners, onDone, line = null) {
         </select></label>` : `<label>Días de alta<input type="number" name="days" min="1" max="3650" value="30"></label>`}
       ${state.user.role === "super_admin" && !editing ? `<label>Propietario<select name="owner_id">${ownerOptions}</select></label>` : ""}
     </div>
+    <div class="row">
+      <label>Aviso por email<input type="email" name="notify_email" maxlength="200"
+        value="${esc(line?.notify_email || "")}" placeholder="vacío = email del propietario"></label>
+      <label>Aviso por Telegram<input name="notify_telegram" maxlength="64"
+        value="${esc(line?.notify_telegram || "")}" placeholder="vacío = chat del panel"></label>
+    </div>
+    <label>Días de antelación del aviso (0 = global)
+      <input type="number" name="notify_days" min="0" max="365" value="${line?.notify_days ?? 0}"></label>
     <label>Notas<textarea name="notes" maxlength="1000">${esc(line?.notes || "")}</textarea></label>
   `, {
     submitLabel: editing ? "Guardar cambios" : "Crear línea",
@@ -538,6 +547,8 @@ function openLineForm(owners, onDone, line = null) {
           name: data.name, protocol: data.protocol, group_name: data.group_name,
           max_connections: Number(data.max_connections), cacheex_mode: Number(data.cacheex_mode),
           cacheex_maxhop: Number(data.cacheex_maxhop), notes: data.notes || null, status: data.status,
+          notify_email: data.notify_email || null, notify_telegram: data.notify_telegram || null,
+          notify_days: Number(data.notify_days || 0),
         };
         await api(`/lines/${line.id}`, { method: "PATCH", body: payload });
         toast("Línea actualizada");
@@ -547,6 +558,8 @@ function openLineForm(owners, onDone, line = null) {
           max_connections: Number(data.max_connections), cacheex_mode: Number(data.cacheex_mode),
           cacheex_maxhop: Number(data.cacheex_maxhop), days: Number(data.days || 30),
           notes: data.notes || null,
+          notify_email: data.notify_email || null, notify_telegram: data.notify_telegram || null,
+          notify_days: Number(data.notify_days || 0),
         };
         if (data.username) payload.username = data.username;
         if (data.password) payload.password = data.password;
@@ -1059,6 +1072,107 @@ async function viewTransactions(el) {
   $("#tx-reload", el).onclick = () => renderView();
 }
 
+/* ---------------------------------------------------------- notificaciones */
+async function viewNotifications(el) {
+  const isAdmin = state.user.role === "super_admin";
+  const [expiring, config, log] = await Promise.all([
+    api("/notifications/expiring?days=7"),
+    api("/notifications/config"),
+    api("/notifications/log?limit=50"),
+  ]);
+
+  const channelBadge = (on, ready) => on
+    ? `<span class="badge ${ready ? "ok" : "warn"}">${ready ? "activo" : "sin configurar"}</span>`
+    : `<span class="badge">desactivado</span>`;
+
+  el.innerHTML = `
+    <div class="grid two">
+      <div class="card">
+        <h3>Estado de los avisos</h3>
+        <div class="grid three" style="margin-top:8px">
+          <div><p class="hint">Avisos automáticos</p>
+            <div class="value">${config.enabled ? "sí" : "no"}</div></div>
+          <div><p class="hint">Antelación</p>
+            <div class="value">${fmtNumber(config.days_before)} días</div></div>
+          <div><p class="hint">Frecuencia</p>
+            <div class="value">${fmtNumber(Math.round(config.interval_seconds / 60))} min</div></div>
+        </div>
+        <p class="hint" style="margin-top:10px">Email ${channelBadge(config.email.enabled, config.email.ready)}
+          &nbsp;·&nbsp; Telegram ${channelBadge(config.telegram.enabled, config.telegram.ready)}</p>
+        ${isAdmin ? `<p class="muted small">Configure los datos SMTP y el bot de Telegram en <strong>Ajustes</strong>.</p>` : ""}
+      </div>
+      <div class="card">
+        <h3>Enviar avisos manualmente</h3>
+        <p class="muted small">Se avisa a las líneas que caducan dentro de la ventana configurada.
+          La simulación no envía nada ni deja registro.</p>
+        <div class="toolbar" style="margin-top:12px">
+          <button class="btn ghost" id="notif-dry">Simular envío</button>
+          <button class="btn primary" id="notif-run">Enviar avisos ahora</button>
+          ${isAdmin ? `<button class="btn blue" id="notif-test-email">Probar email</button>
+          <button class="btn blue" id="notif-test-tg">Probar Telegram</button>` : ""}
+        </div>
+        <pre id="notif-report" class="hint" style="white-space:pre-wrap;margin-top:10px"></pre>
+      </div>
+    </div>
+    <div class="card wide">
+      <h3>Líneas que caducan en ${fmtNumber(expiring.days_before)} días</h3>
+      ${expiring.items.length ? `<div class="table-wrap"><table>
+        <thead><tr><th>Línea</th><th>Usuario</th><th>Propietario</th><th>Caduca</th><th>Días</th>
+          <th>Aviso email</th><th>Aviso Telegram</th><th>Antelación</th></tr></thead>
+        <tbody>${expiring.items.map((line) => `<tr>
+          <td><strong>${esc(line.name)}</strong><div class="hint">${esc(line.protocol)}</div></td>
+          <td><code>${esc(line.username)}</code></td>
+          <td>${esc(line.owner_username)}</td>
+          <td class="nowrap">${fmtDate(line.expires_at)}</td>
+          <td>${line.days_left}</td>
+          <td>${line.notify_email ? esc(line.notify_email) : `<span class="hint">propietario</span>`}</td>
+          <td>${line.notify_telegram ? esc(line.notify_telegram) : `<span class="hint">chat del panel</span>`}</td>
+          <td>${line.notify_days ? `${line.notify_days} días` : `<span class="hint">${config.days_before} (global)</span>`}</td>
+        </tr>`).join("")}</tbody></table></div>`
+        : `<p class="empty small">Ninguna línea caduca en ese plazo.</p>`}
+    </div>
+    <div class="card wide">
+      <h3>Últimos avisos enviados</h3>
+      ${log.items.length ? `<div class="table-wrap"><table>
+        <thead><tr><th>Fecha</th><th>Línea</th><th>Canal</th><th>Destino</th><th>Días</th><th>Resultado</th></tr></thead>
+        <tbody>${log.items.map((item) => `<tr>
+          <td class="nowrap">${fmtDate(item.created_at, true)}</td>
+          <td>${esc(item.line_name || item.line_id || "—")}</td>
+          <td>${esc(item.channel)}</td>
+          <td>${esc(item.target || "—")}</td>
+          <td>${item.days_left}</td>
+          <td><span class="badge ${item.status === "sent" ? "ok" : item.status === "failed" ? "bad" : ""}">${esc(item.status)}</span>
+            ${item.error ? `<div class="hint">${esc(item.error)}</div>` : ""}</td>
+        </tr>`).join("")}</tbody></table></div>`
+        : `<p class="empty small">Todavía no se ha enviado ningún aviso.</p>`}
+    </div>`;
+
+  const report = (data) => {
+    $("#notif-report", el).textContent =
+      `Enviados: ${data.sent.length} · Fallidos: ${data.failed.length} · Omitidos: ${data.skipped.length}`;
+  };
+
+  $("#notif-dry", el).onclick = async () => report(await api("/notifications/run", {
+    method: "POST", body: { dry_run: true },
+  }));
+  $("#notif-run", el).onclick = async () => {
+    const data = await api("/notifications/run", { method: "POST", body: {} });
+    report(data);
+    toast(`Avisos enviados: ${data.sent.length}`);
+    renderView();
+  };
+  if (isAdmin) {
+    $("#notif-test-email", el).onclick = async () => {
+      await api("/notifications/test", { method: "POST", body: { channel: "email" } });
+      toast("Mensaje de prueba enviado por email");
+    };
+    $("#notif-test-tg", el).onclick = async () => {
+      await api("/notifications/test", { method: "POST", body: { channel: "telegram" } });
+      toast("Mensaje de prueba enviado por Telegram");
+    };
+  }
+}
+
 /* -------------------------------------------------------------- auditoría */
 async function viewAudit(el) {
   const { items } = await api("/audit-logs?limit=300");
@@ -1091,6 +1205,22 @@ async function viewAudit(el) {
 }
 
 /* ---------------------------------------------------------------- ajustes */
+const SETTING_LABELS = {
+  "notify.enabled": "Avisos de caducidad activados (1/0)",
+  "notify.days_before": "Días de antelación por defecto",
+  "notify.channel.email": "Enviar avisos por email (1/0)",
+  "notify.channel.telegram": "Enviar avisos por Telegram (1/0)",
+  "notify.interval_seconds": "Segundos entre revisiones automáticas",
+  "notify.smtp.host": "Servidor SMTP",
+  "notify.smtp.port": "Puerto SMTP",
+  "notify.smtp.user": "Usuario SMTP",
+  "notify.smtp.password": "Contraseña SMTP",
+  "notify.smtp.from": "Remitente de los avisos",
+  "notify.smtp.starttls": "Usar STARTTLS (1/0)",
+  "notify.telegram.bot_token": "Token del bot de Telegram",
+  "notify.telegram.chat_id": "Chat de Telegram por defecto",
+};
+
 async function viewSettings(el) {
   const data = await api("/settings");
   const keys = data.editable.filter((key) => key in data.items || key.startsWith("panel."));
@@ -1100,9 +1230,10 @@ async function viewSettings(el) {
       <p class="muted small">Las credenciales del WebIf de NCam se guardan en la base de datos del panel y nunca se devuelven en claro.</p>
       <form id="settings-form" class="grid two" style="margin-top:12px">
         ${keys.map((key) => `
-          <label>${esc(key)}
+          <label>${esc(SETTING_LABELS[key] || key)}
             <input name="${esc(key)}" value="${esc(data.items[key] || "")}"
-              ${key === "panel.ncam_webif_password" ? 'type="password"' : ""}>
+              ${key === "panel.ncam_webif_password" || key === "notify.smtp.password" || key === "notify.telegram.bot_token" ? 'type="password"' : ""}>
+            <span class="hint">${esc(key)}</span>
           </label>`).join("")}
         <div class="actions wide" style="grid-column:1/-1">
           <button class="btn primary" type="submit">Guardar ajustes</button>
@@ -1168,6 +1299,7 @@ const VIEWS = {
   cache: { title: "Caché y peers", subtitle: "Motor de caché NCam-NG y conexiones cacheex", render: viewCache },
   stats: { title: "Estadísticas", subtitle: "Métricas históricas y avisos de caducidad", render: viewStats },
   transactions: { title: "Créditos", subtitle: "Libro mayor de movimientos", render: viewTransactions },
+  notifications: { title: "Avisos de caducidad", subtitle: "Recordatorios por email y Telegram", render: viewNotifications },
   audit: { title: "Auditoría", subtitle: "Registro de acciones sensibles", render: viewAudit },
   settings: { title: "Ajustes", subtitle: "Configuración global y mantenimiento", render: viewSettings },
 };

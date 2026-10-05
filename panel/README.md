@@ -107,6 +107,16 @@ GET    /lines/{id}/password               consulta explícita (auditada)
 GET    /lines/{id}/export?format=         ncam | cccam | newcamd | camd35 | json
 ```
 
+Avisos de caducidad (`/api/v1/notifications`)
+
+```
+GET    /notifications/expiring?days=      líneas por caducar visibles para el usuario
+POST   /notifications/run                 envía los avisos (dry_run para simular)
+GET    /notifications/log                 histórico de avisos enviados
+GET    /notifications/config              configuración activa (sin secretos)
+POST   /notifications/test                mensaje de prueba (super admin)
+```
+
 Caché (`/api/v1/cache`)
 
 ```
@@ -161,6 +171,38 @@ curl -s localhost:8080/api/v1/cache/stats -H "Authorization: Bearer $TOKEN" | jq
 ```bash
 curl -s localhost:8080/api/v1/lines -H "X-API-Key: ng_xxxxxxxxxxxx"
 ```
+
+## 3.1 Avisos de caducidad (email / Telegram)
+
+El panel revisa las líneas activas y avisa cuando están a punto de expirar.
+El envío se controla desde **Ajustes** (super admin) con estos valores:
+
+| Ajuste | Descripción |
+| --- | --- |
+| `notify.enabled` | activa el planificador automático (`1`/`0`) |
+| `notify.days_before` | días de antelación por defecto |
+| `notify.interval_seconds` | cada cuánto revisa (por defecto 3600) |
+| `notify.channel.email` / `notify.channel.telegram` | canales activos |
+| `notify.smtp.*` | host, puerto, usuario, contraseña, remitente y STARTTLS |
+| `notify.telegram.bot_token` / `notify.telegram.chat_id` | bot y chat por defecto |
+
+Cada línea puede sobrescribir el destino (`notify_email`, `notify_telegram`) y
+la antelación (`notify_days`) en su propio formulario; si se dejan vacíos se usa
+el email del propietario y el chat por defecto del panel.
+
+Endpoints:
+
+```
+GET  /api/v1/notifications/expiring?days=7   líneas a punto de caducar
+POST /api/v1/notifications/run               envía los avisos (o simula con dry_run)
+GET  /api/v1/notifications/log?limit=100     histórico de avisos
+GET  /api/v1/notifications/config            resumen de la configuración (sin secretos)
+POST /api/v1/notifications/test              mensaje de prueba (super admin)
+```
+
+Reglas anti-spam: nunca se repite un aviso para la misma línea y canal con los
+mismos días restantes, ni dos veces en 20 horas; los envíos fallidos se
+reintentan en la siguiente pasada y quedan registrados con su error.
 
 ## 4. Integración con el daemon NCam
 

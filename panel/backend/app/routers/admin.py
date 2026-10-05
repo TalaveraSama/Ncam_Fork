@@ -32,9 +32,23 @@ EDITABLE_SETTINGS = {
     "billing.line_cost",
     "billing.renew_cost",
     "billing.currency",
+    # avisos de caducidad
+    "notify.enabled",
+    "notify.days_before",
+    "notify.channel.email",
+    "notify.channel.telegram",
+    "notify.interval_seconds",
+    "notify.smtp.host",
+    "notify.smtp.port",
+    "notify.smtp.user",
+    "notify.smtp.password",
+    "notify.smtp.from",
+    "notify.smtp.starttls",
+    "notify.telegram.bot_token",
+    "notify.telegram.chat_id",
 }
 
-SECRET_SETTINGS = {"panel.ncam_webif_password"}
+SECRET_SETTINGS = {"panel.ncam_webif_password", "notify.smtp.password", "notify.telegram.bot_token"}
 
 
 @router.get("/meta")
@@ -55,6 +69,8 @@ def meta(ctx: AuthContext = Depends(current_user)):
             "cache:config-generator",
             "audit:logs",
             "auth:jwt+api-key",
+            "notify:expiry-email",
+            "notify:expiry-telegram",
         ],
     }
 

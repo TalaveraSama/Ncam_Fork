@@ -101,6 +101,14 @@ PYTHONPATH=backend python3 -m app.seed --demo
 | **reseller** | Gestiona **sus** líneas y **sus** usuarios finales, con saldo de créditos que se descuenta al crear/renovar líneas; puede transferir créditos a sus usuarios y rotar su API key. No ve datos de otros resellers. |
 | **user** | Solo lectura de sus propias líneas (credenciales, caducidad) y su saldo. |
 
+### Avisos de caducidad
+
+El panel avisa (por **email** y/o **Telegram**) cuando una línea está a punto de
+expirar: antelación global o por línea, destinos propios o heredados del
+propietario, planificador automático, envío manual/simulado e histórico de
+avisos. Se configura en la vista **Ajustes** (`notify.*`) y se prueba con un
+botón desde la vista **Avisos de caducidad**.
+
 Detalles completos en [`panel/README.md`](panel/README.md).
 
 ---
@@ -140,8 +148,8 @@ El binario resultante es `ncam` (o `oscam` según `--oscam`). Consulta
 ## 5. Pruebas
 
 ```bash
-devtools/run-cache-test.sh                        # motor de caché (C)
-cd panel/backend && python3 -m pytest             # API del panel (Python)
+devtools/run-cache-test.sh                        # motor de caché (C): 37 comprobaciones
+cd panel/backend && python3 -m pytest             # API del panel (Python): 50 pruebas
 ```
 
 ## 6. Aviso legal

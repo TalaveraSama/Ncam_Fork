@@ -99,6 +99,12 @@ class Settings:
     ncam_poll_enabled: bool = _env_bool("NCAM_PANEL_CACHE_POLL", True)
     ncam_poll_interval: int = _env_int("NCAM_PANEL_CACHE_POLL_INTERVAL", 60)
 
+    # --- avisos de caducidad -----------------------------------------------
+    panel_name: str = os.environ.get("NCAM_PANEL_NAME", "NCam-NG Panel")
+    # el envío periódico se controla con notify.enabled / notify.interval_seconds
+    # en los ajustes del panel; esto es solo el valor de arranque del planificador
+    notify_enabled: bool = _env_bool("NCAM_PANEL_NOTIFY", True)
+
     # --- reglas de negocio --------------------------------------------------
     default_line_days: int = _env_int("NCAM_PANEL_LINE_DAYS", 30)
     line_cost_credits: int = _env_int("NCAM_PANEL_LINE_COST", 10)

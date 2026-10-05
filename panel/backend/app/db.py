@@ -17,7 +17,7 @@ from typing import Any, Iterable, Iterator, Optional
 from .config import settings
 
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 SCHEMA = """
 PRAGMA journal_mode = WAL;
@@ -67,6 +67,9 @@ CREATE TABLE IF NOT EXISTS lines (
     cacheex_mode      INTEGER NOT NULL DEFAULT 0,
     cacheex_maxhop    INTEGER NOT NULL DEFAULT 0,
     cacheex_disable   INTEGER NOT NULL DEFAULT 0,
+    notify_email      TEXT,                              -- destino de los avisos (si vacío: email del propietario)
+    notify_telegram   TEXT,                              -- chat_id de Telegram (si vacío: chat por defecto del panel)
+    notify_days       INTEGER NOT NULL DEFAULT 0,        -- días de antelación propios (0 = usar el global)
     notes             TEXT,
     created_at        TEXT    NOT NULL,
     updated_at        TEXT    NOT NULL,
@@ -159,6 +162,23 @@ CREATE TABLE IF NOT EXISTS login_attempts (
 
 CREATE INDEX IF NOT EXISTS idx_login_attempts ON login_attempts(username, created_at);
 
+-- Avisos de caducidad enviados (email/telegram), evita duplicados
+CREATE TABLE IF NOT EXISTS notification_log (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    line_id    INTEGER REFERENCES lines(id) ON DELETE CASCADE,
+    owner_id   INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    channel    TEXT    NOT NULL CHECK (channel IN ('email', 'telegram')),
+    target     TEXT,
+    days_left  INTEGER NOT NULL,
+    expires_at TEXT,
+    status     TEXT    NOT NULL CHECK (status IN ('sent', 'failed', 'skipped')),
+    error      TEXT,
+    created_at TEXT    NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_notifications_line ON notification_log(line_id, channel, created_at);
+CREATE INDEX IF NOT EXISTS idx_notifications_date ON notification_log(created_at);
+
 -- Refresh tokens revocables
 CREATE TABLE IF NOT EXISTS refresh_tokens (
     jti        TEXT PRIMARY KEY,
@@ -219,7 +239,7 @@ def init_db(db_path: Optional[Path] = None) -> None:
                     (SCHEMA_VERSION, utcnow()),
                 )
             elif int(row["version"]) != SCHEMA_VERSION:
-                # migraciones incrementales futuras se añaden aquí
+                _migrate(conn, int(row["version"]))
                 conn.execute(
                     "UPDATE schema_info SET version = ?, updated_at = ?",
                     (SCHEMA_VERSION, utcnow()),
@@ -227,6 +247,19 @@ def init_db(db_path: Optional[Path] = None) -> None:
             _ensure_default_settings(conn)
         finally:
             conn.close()
+
+
+def _migrate(conn: sqlite3.Connection, from_version: int) -> None:
+    """Migraciones incrementales sobre bases de datos ya existentes."""
+    line_columns = {row["name"] for row in conn.execute("PRAGMA table_info(lines)")}
+    if from_version < 3:
+        for column, ddl in (
+            ("notify_email", "ALTER TABLE lines ADD COLUMN notify_email TEXT"),
+            ("notify_telegram", "ALTER TABLE lines ADD COLUMN notify_telegram TEXT"),
+            ("notify_days", "ALTER TABLE lines ADD COLUMN notify_days INTEGER NOT NULL DEFAULT 0"),
+        ):
+            if column not in line_columns:
+                conn.execute(ddl)
 
 
 DEFAULT_SETTINGS = {
@@ -243,6 +276,20 @@ DEFAULT_SETTINGS = {
     "panel.ncam_webif_url": settings.ncam_webif_url,
     "panel.ncam_webif_user": settings.ncam_webif_user,
     "panel.ncam_webif_password": settings.ncam_webif_password,
+    # avisos de caducidad (email / telegram)
+    "notify.enabled": "0",
+    "notify.days_before": "3",
+    "notify.channel.email": "0",
+    "notify.channel.telegram": "0",
+    "notify.interval_seconds": "3600",
+    "notify.smtp.host": "",
+    "notify.smtp.port": "587",
+    "notify.smtp.user": "",
+    "notify.smtp.password": "",
+    "notify.smtp.from": "",
+    "notify.smtp.starttls": "1",
+    "notify.telegram.bot_token": "",
+    "notify.telegram.chat_id": "",
     # datos publicados a los clientes finales
     "panel.public_host": "TU_SERVIDOR",
     "panel.port.cccam": "12000",

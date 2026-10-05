@@ -472,6 +472,9 @@ def create_line(conn: sqlite3.Connection, ctx: AuthContext, payload: dict[str, A
             "cacheex_mode": int(payload.get("cacheex_mode") or 0),
             "cacheex_maxhop": int(payload.get("cacheex_maxhop") or 0),
             "cacheex_disable": int(payload.get("cacheex_disable") or 0),
+            "notify_email": payload.get("notify_email"),
+            "notify_telegram": payload.get("notify_telegram"),
+            "notify_days": int(payload.get("notify_days") or 0),
             "notes": payload.get("notes"),
             "created_at": now,
             "updated_at": now,
@@ -499,6 +502,9 @@ def update_line(conn: sqlite3.Connection, ctx: AuthContext, line_id: int, payloa
         "cacheex_mode",
         "cacheex_maxhop",
         "cacheex_disable",
+        "notify_email",
+        "notify_telegram",
+        "notify_days",
         "notes",
     )
     values = {key: payload[key] for key in allowed if key in payload and payload[key] is not None}

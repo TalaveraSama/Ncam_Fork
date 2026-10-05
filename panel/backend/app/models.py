@@ -2,9 +2,24 @@
 
 from __future__ import annotations
 
+import re
+
 from typing import Literal, Optional
 
 from pydantic import BaseModel, Field, field_validator
+
+EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s.]+\.[^@\s]{2,}$")
+
+
+def _check_email(value: Optional[str]) -> Optional[str]:
+    """Validación ligera de emails, sin dependencias externas."""
+    if value in (None, ""):
+        return None
+    value = value.strip()
+    if not EMAIL_RE.match(value):
+        raise ValueError("Email con formato inválido")
+    return value
+
 
 Role = Literal["super_admin", "reseller", "user"]
 LineProtocol = Literal["cccam", "newcamd", "camd35", "cacheex"]
@@ -86,7 +101,12 @@ class LineCreate(BaseModel):
     cacheex_mode: int = Field(default=0, ge=0, le=3)
     cacheex_maxhop: int = Field(default=0, ge=0, le=10)
     cacheex_disable: int = Field(default=0, ge=0, le=1)
+    notify_email: Optional[str] = Field(default=None, max_length=200)
+    notify_telegram: Optional[str] = Field(default=None, max_length=64)
+    notify_days: int = Field(default=0, ge=0, le=365)
     notes: Optional[str] = Field(default=None, max_length=1000)
+
+    _email_format = field_validator("notify_email")(classmethod(lambda cls, value: _check_email(value)))
 
     @field_validator("username")
     @classmethod
@@ -108,7 +128,12 @@ class LineUpdate(BaseModel):
     cacheex_mode: Optional[int] = Field(default=None, ge=0, le=3)
     cacheex_maxhop: Optional[int] = Field(default=None, ge=0, le=10)
     cacheex_disable: Optional[int] = Field(default=None, ge=0, le=1)
+    notify_email: Optional[str] = Field(default=None, max_length=200)
+    notify_telegram: Optional[str] = Field(default=None, max_length=64)
+    notify_days: Optional[int] = Field(default=None, ge=0, le=365)
     notes: Optional[str] = Field(default=None, max_length=1000)
+
+    _email_format = field_validator("notify_email")(classmethod(lambda cls, value: _check_email(value)))
 
 
 class LineRenew(BaseModel):
@@ -155,3 +180,25 @@ class SettingsUpdate(BaseModel):
         if len(value) > 64:
             raise ValueError("Demasiados ajustes en una sola petición")
         return value
+
+
+# ---------------------------------------------------------------------------
+# avisos de caducidad
+# ---------------------------------------------------------------------------
+class NotificationRunRequest(BaseModel):
+    days: Optional[int] = Field(default=None, ge=1, le=365)
+    dry_run: bool = False
+    force: bool = False
+    channels: Optional[list[Literal["email", "telegram"]]] = None
+
+    @field_validator("channels")
+    @classmethod
+    def _known_channels(cls, value):
+        if value is not None and not value:
+            raise ValueError("Indique al menos un canal")
+        return value
+
+
+class NotificationTestRequest(BaseModel):
+    channel: Literal["email", "telegram"]
+    target: Optional[str] = Field(default=None, max_length=200)

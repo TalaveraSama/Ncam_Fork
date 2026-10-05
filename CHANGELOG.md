@@ -59,6 +59,11 @@
   datos del panel.
 * Auditoría de todas las acciones sensibles, ajustes con lista blanca y
   mantenimiento del histórico.
-* 38 pruebas automatizadas (`pytest`) de roles, líneas, créditos, caché, auditoría
-  y API keys.
+* **Avisos de caducidad** de líneas por email (SMTP con STARTTLS opcional) y
+  Telegram (Bot API), con antelación configurable por línea o global, destinos
+  propios o heredados del propietario, planificador automático
+  (`notify.interval_seconds`), simulación de envío, mensaje de prueba, histórico
+  en `notification_log` y reglas anti-spam (mismo umbral / 20 h por línea y canal).
+* 50 pruebas automatizadas (`pytest`) de roles, líneas, créditos, caché, auditoría,
+  API keys y notificaciones.
 * `panel/tools/mock_ncam_webif.py`: simulador del WebIf para desarrollar sin daemon.
