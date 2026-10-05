@@ -130,6 +130,13 @@ Detalles completos en [`panel/README.md`](panel/README.md).
 Guía paso a paso (daemon + panel, con systemd y problemas frecuentes):
 [`INSTALL.md`](INSTALL.md).
 
+Servicios systemd para que daemon y panel arranquen solos y sobrevivan al cierre
+de la terminal:
+
+```bash
+sudo devtools/install-systemd.sh
+```
+
 ### Compilación del daemon
 
 Igual que el NCam original (Makefile / CMake con soporte de toolchains):

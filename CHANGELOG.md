@@ -44,6 +44,12 @@
   en uso (la de los ajustes, no solo la del entorno).
 * Nueva guía [`INSTALL.md`](INSTALL.md) con la instalación completa (compilación,
   configuración, systemd, actualizaciones y problemas frecuentes).
+* Nuevo `devtools/install-systemd.sh`: instala `/etc/systemd/system/ncam.service` y
+  `ncam-panel.service` con las rutas detectadas, los habilita y arranca, de modo
+  que daemon y panel sobreviven al cierre de la terminal. Detecta si el binario
+  necesita `-f` (los builds con STAPI demonizan por defecto; los estándar ya
+  arrancan en primer plano), avisa si el puerto está ocupado por un proceso manual
+  y guarda copia de las unidades previas.
 * Nuevo `devtools/install-panel.sh`: prepara el panel desde la raíz del repositorio
   (entorno virtual en `panel/.venv`, dependencias, `.env` con secreto generado y
   super administrador) de forma idempotente.

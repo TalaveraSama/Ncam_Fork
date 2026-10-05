@@ -137,21 +137,40 @@ curl --digest -u admin:TU_CLAVE_WEBIF "http://127.0.0.1:8181/ncamapi.json?part=c
 > Si **no** define `httpuser`/`httppwd`, el WebIf queda abierto sin contraseña
 > (útil solo para pruebas en local: entonces omita `--digest`).
 
-### 6. Servicio systemd (opcional pero recomendado)
+### 6. Servicio systemd (muy recomendado)
 
-`/etc/systemd/system/ncam.service`:
+Con esto el daemon y el panel **siguen funcionando al cerrar la terminal**, arrancan
+solos con el servidor y se reinician si fallan:
+
+```bash
+sudo devtools/install-systemd.sh              # daemon + panel
+sudo devtools/install-systemd.sh --panel-only # solo el panel
+```
+
+Crea `/etc/systemd/system/ncam.service` y `ncam-panel.service` con las rutas
+detectadas, los habilita y los arranca. Avisa si el binario o el entorno virtual
+faltan y guarda copia de las unidades anteriores (`.bak-fecha`).
+
+> Antes de arrancar el servicio, **para el panel manual** (`Ctrl+C`) o el puerto
+> 8080 estará ocupado. Igual con el daemon si lo lanzaste a mano.
+
+Si prefieres hacerlo a mano, el contenido generado es este:
 
 ```ini
+# /etc/systemd/system/ncam.service
 [Unit]
-Description=NCam-NG daemon
+Description=NCam-NG daemon (cardserver + motor de caché)
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=simple
-ExecStart=/usr/local/bin/ncam -c /usr/local/etc -b -B /run/ncam.pid
+# los binarios estándar arrancan en primer plano; los compilados con STAPI
+# demonizan y necesitan -f (el instalador lo añade solo)
+ExecStart=/usr/local/bin/ncam -c /usr/local/etc
 Restart=on-failure
 RestartSec=5
+TimeoutStopSec=20
 
 [Install]
 WantedBy=multi-user.target
@@ -242,22 +261,34 @@ Entra con el super admin y revisa:
 * **Avisos de caducidad** → SMTP/Telegram y días de antelación.
 * **Caché y peers** → métricas en vivo del motor de caché v2.
 
-### 5. Servicio systemd (opcional)
+### 5. Servicio systemd (muy recomendado)
 
-`/etc/systemd/system/ncam-panel.service`:
+El panel solo vive mientras la terminal esté abierta si lo lanzas a mano. Para que
+quede como servicio (arranca solo, sobrevive al cierre de sesión y se reinicia):
+
+```bash
+sudo devtools/install-systemd.sh --panel-only
+sudo systemctl status ncam-panel
+```
+
+El instalador escribe `/etc/systemd/system/ncam-panel.service` con la ruta real de
+tu `panel/`, usando el entorno virtual y cargando `panel/.env` (lo lee la propia
+aplicación). Si prefieres hacerlo a mano:
 
 ```ini
+# /etc/systemd/system/ncam-panel.service
 [Unit]
-Description=NCam-NG Panel
+Description=NCam-NG Panel (API + web de gestión)
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=simple
-User=TU_USUARIO
-WorkingDirectory=/opt/ncam-panel
-Environment=PYTHONPATH=/opt/ncam-panel/backend
-ExecStart=/opt/ncam-panel/.venv/bin/python3 -m uvicorn app.main:app --host 0.0.0.0 --port 8080
+WorkingDirectory=/ruta/a/Ncam_Fork/panel
+Environment=PYTHONPATH=/ruta/a/Ncam_Fork/panel/backend
+Environment=NCAM_PANEL_HOST=0.0.0.0
+Environment=NCAM_PANEL_PORT=8080
+ExecStart=/ruta/a/Ncam_Fork/panel/.venv/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port 8080
 Restart=on-failure
 RestartSec=5
 
@@ -268,6 +299,14 @@ WantedBy=multi-user.target
 ```bash
 sudo systemctl daemon-reload
 sudo systemctl enable --now ncam-panel
+```
+
+Comandos del día a día:
+
+```bash
+sudo systemctl status ncam ncam-panel
+sudo journalctl -u ncam-panel -f          # log del panel en vivo
+sudo systemctl restart ncam-panel         # tras cambiar panel/.env
 ```
 
 > El panel guarda la base de datos en `panel/backend/data/panel.db` (configurable
@@ -307,6 +346,8 @@ esquema v4 añade las columnas de avisos y de consumo de ECM).
 | El WebIf no responde en la red local | Ajusta `httpallowed` y `httpport` en `[webif]`, y abre el puerto en el cortafuegos. |
 | Los avisos de caducidad no se envían | Activa `notify.enabled`, el canal (`notify.channel.email` / `notify.channel.telegram`) y rellena `notify.smtp.*` o el token del bot. |
 | La facturación por ECM no cobra | Debe haber **bloques completos** servidos (`billing.ecm.block`), saldo del propietario y las líneas exportadas al daemon como cuentas. |
+| Cierro la terminal y el panel deja de responder | está lanzado a mano: instálalo como servicio con `sudo devtools/install-systemd.sh`. |
+| El servicio no arranca y el puerto está ocupado | tienes un proceso manual usando el mismo puerto: páralo (`Ctrl+C` o `sudo kill`) y `sudo systemctl restart ncam-panel`. |
 | `Could not open requirements file: requirements.txt` | Estás en la raíz del repo: `pip install -r panel/requirements.txt`, o mejor `cd panel` (o usa `devtools/install-panel.sh`). |
 | `.venv` creado en la raíz del repo por error | El entorno del panel va en `panel/.venv`: borra el de la raíz (`rm -rf .venv`) y ejecuta `devtools/install-panel.sh`. |
 | `ModuleNotFoundError: No module named 'app'` | Ejecuta siempre desde `panel/` con `PYTHONPATH=backend` (o usa `./run.sh`). |
