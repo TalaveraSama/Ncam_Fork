@@ -136,8 +136,14 @@ Igual que el NCam original (Makefile / CMake con soporte de toolchains):
 make -j"$(nproc)"
 ```
 
-El binario resultante es `ncam` (o `oscam` según `--oscam`). Consulta
-`Distribution/doc/` para la documentación de configuración clásica.
+El binario resultante queda en `Distribution/` y se instala con:
+
+```bash
+sudo devtools/install-daemon.sh --with-config   # binario + ejemplos de configuración
+```
+
+Consulta `INSTALL.md` para la guía completa y `Distribution/doc/` para la
+documentación de configuración clásica.
 
 ---
 

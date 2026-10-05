@@ -44,6 +44,9 @@
   en uso (la de los ajustes, no solo la del entorno).
 * Nueva guía [`INSTALL.md`](INSTALL.md) con la instalación completa (compilación,
   configuración, systemd, actualizaciones y problemas frecuentes).
+* Nuevo `devtools/install-daemon.sh`: instala el binario final (excluye siempre el
+  `.debug`), prefiere el del commit actual, avisa si el binario está desfasado y
+  copia los ejemplos de configuración sin sobrescribir los existentes.
 
 ### Pruebas
 

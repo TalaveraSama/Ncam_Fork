@@ -75,14 +75,28 @@ make -j"$(nproc)"
 
 ### 3. Instalar el binario
 
+La forma más simple (elige solo el binario final, nunca el `.debug`, y no
+sobrescribe configuraciones existentes):
+
 ```bash
-sudo install -m 0755 Distribution/ncam-Unofficial-*-x86_64-linux-gnu /usr/local/bin/ncam
+sudo devtools/install-daemon.sh --with-config
+```
+
+Equivale a copiar el binario a `/usr/local/bin/ncam` y los ejemplos
+(`ncam.conf`, `ncam.server`, `ncam.user`, `ncam.services`) a `/usr/local/etc`.
+Opciones: `--help`, y variables `PREFIX=` y `CONFDIR=` para otros destinos.
+
+Instalación manual (ojo: **no** uses `Distribution/ncam-*`, el comodín también
+captura el `.debug` y falla con *"is not a directory"*):
+
+```bash
+ls -1 Distribution/ncam-Unofficial-*-x86_64-linux-gnu | grep -v '\.debug$'
+sudo install -m 0755 Distribution/ncam-Unofficial-gitXXXXXXX-x86_64-linux-gnu /usr/local/bin/ncam
 sudo mkdir -p /usr/local/etc
-# configuración de ejemplo (copiar los ficheros que uses)
-sudo cp Distribution/doc/example/ncam.conf       /usr/local/etc/
-sudo cp Distribution/doc/example/ncam.server     /usr/local/etc/   # readers (opcional)
-sudo cp Distribution/doc/example/ncam.user       /usr/local/etc/   # cuentas  (opcional)
-sudo cp Distribution/doc/example/ncam.services   /usr/local/etc/   # opcional
+sudo cp Distribution/doc/example/ncam.conf     /usr/local/etc/
+sudo cp Distribution/doc/example/ncam.server   /usr/local/etc/   # readers (opcional)
+sudo cp Distribution/doc/example/ncam.user     /usr/local/etc/   # cuentas  (opcional)
+sudo cp Distribution/doc/example/ncam.services /usr/local/etc/   # opcional
 ```
 
 ### 4. Configurar el motor de caché y el WebIf
@@ -247,7 +261,7 @@ sudo systemctl enable --now ncam-panel
 cd Ncam_Fork
 git pull                                   # o git pull origin main tras fusionar el PR
 make -j"$(nproc)"
-sudo install -m 0755 Distribution/ncam-Unofficial-*-x86_64-linux-gnu /usr/local/bin/ncam
+sudo devtools/install-daemon.sh            # avisa si el binario no es del commit actual
 sudo systemctl restart ncam
 
 cd panel
@@ -265,6 +279,7 @@ esquema v4 añade las columnas de avisos y de consumo de ECM).
 
 | Síntoma | Causa y solución |
 | --- | --- |
+| `install: target '/usr/local/bin/ncam' is not a directory` | El comodín coincidió con dos ficheros (el binario y el `.debug`). Usa el nombre exacto o `sudo devtools/install-daemon.sh`. |
 | `openssl/aes.h: No such file or directory` | Compilaste con `--enable all` sin SSL: `sudo apt install libssl-dev libdvbcsa-dev` o compila sin `./config.sh`. |
 | El panel dice *WebIf de NCam rechazó las credenciales* | Usuario/contraseña incorrectos: deben coincidir con `httpuser`/`httppwd` del daemon. |
 | El panel dice *WebIf de NCam no disponible* | Revisa `NCAM_WEBIF_URL`/`panel.ncam_webif_url`, que el daemon esté escuchando (`ss -ltnp | grep 8181`) y que `httpallowed` incluya la IP del panel. |
