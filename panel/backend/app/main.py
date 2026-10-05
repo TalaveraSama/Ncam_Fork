@@ -22,10 +22,11 @@ from fastapi.staticfiles import StaticFiles
 
 from . import db as database
 from . import ncam
+from . import billing
 from . import notifications
 from .services import record_snapshot
 from .config import FRONTEND_DIR, settings
-from .routers import accounts, admin, auth, cache, lines, notifications as notifications_router, stats
+from .routers import accounts, admin, auth, billing as billing_router, cache, lines, notifications as notifications_router, stats
 
 
 log = logging.getLogger("ncam.panel")
@@ -93,6 +94,41 @@ def _notify_once() -> int:
         return conf["interval_seconds"]
 
 
+async def _ecm_biller(stop_event: asyncio.Event) -> None:
+    """Mide el consumo de ECM y factura los bloques completos pendientes.
+
+    Solo actúa si ``billing.ecm.enabled`` está activo (por defecto: apagado, el
+    panel no cobra nada sin que se le pida).
+    """
+    while not stop_event.is_set():
+        interval = 900
+        try:
+            interval = await asyncio.to_thread(_bill_once)
+        except Exception as exc:
+            log.warning("no se pudo facturar el consumo de ECM: %s", exc)
+        try:
+            await asyncio.wait_for(stop_event.wait(), timeout=interval)
+        except asyncio.TimeoutError:
+            continue
+
+
+def _bill_once() -> int:
+    with database.session() as conn:
+        conf = billing.billing_settings(conn)
+        if not conf["enabled"]:
+            return conf["interval_seconds"]
+        report = billing.run_billing(conn)
+        if report["billed_blocks"]:
+            log.info(
+                "consumo de ECM facturado: %s bloques, %s %s en %s líneas",
+                report["billed_blocks"],
+                report["billed_credits"],
+                report["currency"],
+                len(report["lines"]),
+            )
+        return conf["interval_seconds"]
+
+
 def _collect_snapshot() -> None:
     with database.session() as conn:
         stats = ncam.fetch_cache_stats(conn)
@@ -130,6 +166,7 @@ async def lifespan(app: FastAPI):
         task = asyncio.create_task(_cache_sampler(stop_event))
     if settings.notify_enabled:
         notifier = asyncio.create_task(_expiry_notifier(stop_event))
+    biller = asyncio.create_task(_ecm_biller(stop_event))
     log.info(
         "NCam-NG Panel %s listo en http://%s:%s (NCam WebIf: %s)",
         settings.version,
@@ -141,7 +178,7 @@ async def lifespan(app: FastAPI):
         yield
     finally:
         stop_event.set()
-        for pending in (task, notifier):
+        for pending in (task, notifier, biller):
             if not pending:
                 continue
             pending.cancel()
@@ -180,6 +217,7 @@ app.include_router(cache.router, prefix=API_PREFIX)
 app.include_router(stats.router, prefix=API_PREFIX)
 app.include_router(admin.router, prefix=API_PREFIX)
 app.include_router(notifications_router.router, prefix=API_PREFIX)
+app.include_router(billing_router.router, prefix=API_PREFIX)
 
 
 @app.get(f"{API_PREFIX}/health", tags=["meta"])

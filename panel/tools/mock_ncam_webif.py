@@ -6,15 +6,21 @@ Sirve el mismo contrato JSON que expone el daemon:
 
     GET /ncamapi.json?part=cachestats   -> estadísticas del motor de caché v2
     GET /ncamapi.json?part=status       -> cabecera/totales del daemon
+    GET /ncamapi.json?part=userstats    -> contadores de ECM por cuenta (facturación)
 
 Sirve para probar el panel sin compilar NCam y para desarrollar el frontend.
 
-    python3 panel/tools/mock_ncam_webif.py --port 8181
+Las cuentas simuladas se toman de ``--users`` (o del fichero ``--users-file``, un
+JSON con la lista de nombres). Cada contador crece con el tiempo de forma
+determinista, de modo que la facturación por consumo se puede probar de verdad.
+
+    python3 panel/tools/mock_ncam_webif.py --port 8181 --users demo_linea,otra_linea
 """
 
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import math
 import random
@@ -44,6 +50,12 @@ class MockState:
             {"caid": "1810", "prid": "000000", "srvid": "2AF8", "hits": 812, "from_csp": 0, "from_cacheex": 1, "from_localcards": 1},
         ]
 
+    def ecm_counter(self, username: str) -> int:
+        """Contador de ECM acumulado y creciente para cada cuenta simulada."""
+        base = int(hashlib.md5(username.encode()).hexdigest()[:4], 16) % 5000
+        # ~1 ECM/s desde el arranque del simulador
+        return base + int((time.time() - self.started) * 1.0)
+
     def tick(self) -> None:
         # pequeñas variaciones para que los gráficos se muevan
         self.hits += random.randint(5, 40)
@@ -60,6 +72,7 @@ class MockState:
 
 
 STATE = MockState()
+MOCK_USERS: list[str] = ["demo_linea"]
 
 
 def cachestats_payload() -> dict:
@@ -100,6 +113,43 @@ def cachestats_payload() -> dict:
             },
         }
     }
+
+
+def userstats_payload(only: str | None = None) -> dict:
+    """Mismo contrato que ``part=userstats`` del daemon, con ``cwok`` por cuenta."""
+    users = [only] if only else MOCK_USERS
+    now = datetime.now(timezone.utc)
+    entries = []
+    for username in users:
+        counter = STATE.ecm_counter(username)
+        entries.append({
+            "user": {
+                "usermd5": "id_" + hashlib.md5(username.encode()).hexdigest(),
+                "status": "online" if counter % 2 else "offline",
+                "classname": "online",
+                "expdate": (now.replace(year=now.year + 1)).strftime("%Y-%m-%d"),
+                "groups": "1",
+                "stats": {
+                    "cwok": str(counter),
+                    "cwnok": str(counter // 50),
+                    "cwcache": str(counter // 3),
+                    "cwtimeout": "0",
+                    "cwignore": "0",
+                    "cwtun": "0",
+                    "emmok": "0",
+                    "emmnok": "0",
+                    "cwrate": "1.00",
+                },
+            }
+        })
+    return {"ncam": {
+        "version": "Unofficial",
+        "revision": "mock-userstats",
+        "build": now.strftime("%d-%m-%Y"),
+        "starttime": now.isoformat(),
+        "uptime": str(int(time.time() - STATE.started)),
+        "users": entries,
+    }}
 
 
 def status_payload() -> dict:
@@ -144,7 +194,12 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         part = (params.get("part") or ["status"])[0]
-        payload = cachestats_payload() if part == "cachestats" else status_payload()
+        if part == "cachestats":
+            payload = cachestats_payload()
+        elif part == "userstats":
+            payload = userstats_payload((params.get("user") or [None])[0])
+        else:
+            payload = status_payload()
         body = json.dumps(payload, indent=1).encode()
 
         self.send_response(200)
@@ -161,11 +216,23 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Simulador del WebIf de NCam")
     parser.add_argument("--host", default="0.0.0.0")
     parser.add_argument("--port", type=int, default=8181)
+    parser.add_argument("--users", default="demo_linea",
+                        help="nombres de cuenta separados por comas para part=userstats")
+    parser.add_argument("--users-file", default=None,
+                        help="fichero JSON con una lista de nombres de cuenta")
     args = parser.parse_args()
+
+    global MOCK_USERS
+    if args.users_file:
+        with open(args.users_file, encoding="utf-8") as handle:
+            MOCK_USERS = [str(name) for name in json.load(handle)]
+    else:
+        MOCK_USERS = [name.strip() for name in args.users.split(",") if name.strip()] or ["demo_linea"]
 
     server = ThreadingHTTPServer((args.host, args.port), Handler)
     print(f"Simulador del WebIf de NCam escuchando en http://{args.host}:{args.port}")
-    print("Endpoints: /ncamapi.json?part=cachestats  |  /ncamapi.json?part=status")
+    print("Endpoints: /ncamapi.json?part=cachestats | part=status | part=userstats")
+    print(f"Cuentas simuladas: {', '.join(MOCK_USERS)}")
     try:
         server.serve_forever()
     except KeyboardInterrupt:

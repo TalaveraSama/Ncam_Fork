@@ -64,6 +64,13 @@
   propios o heredados del propietario, planificador automático
   (`notify.interval_seconds`), simulación de envío, mensaje de prueba, histórico
   en `notification_log` y reglas anti-spam (mismo umbral / 20 h por línea y canal).
-* 50 pruebas automatizadas (`pytest`) de roles, líneas, créditos, caché, auditoría,
-  API keys y notificaciones.
+* **Facturación por consumo real de ECM**: el panel lee `part=userstats` del
+  daemon, guarda el avance de cada línea (`ecm_usage`) y cobra al propietario los
+  bloques completos servidos (`billing.ecm.block` / `billing.ecm.price`), con
+  libro mayor, saldo pendiente si no alcanzan los créditos, detección de reinicio
+  del daemon y suspensión opcional por deuda.
+* El simulador `panel/tools/mock_ncam_webif.py` implementa también
+  `part=userstats` con contadores crecientes, para probar la facturación sin daemon.
+* 60 pruebas automatizadas (`pytest`) de roles, líneas, créditos, caché, auditoría,
+  notificaciones y consumo.
 * `panel/tools/mock_ncam_webif.py`: simulador del WebIf para desarrollar sin daemon.

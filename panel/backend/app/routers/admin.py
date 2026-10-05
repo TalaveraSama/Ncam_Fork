@@ -46,6 +46,12 @@ EDITABLE_SETTINGS = {
     "notify.smtp.starttls",
     "notify.telegram.bot_token",
     "notify.telegram.chat_id",
+    # facturación por consumo de ECM
+    "billing.ecm.enabled",
+    "billing.ecm.price",
+    "billing.ecm.block",
+    "billing.ecm.interval_seconds",
+    "billing.ecm.suspend_on_debt",
 }
 
 SECRET_SETTINGS = {"panel.ncam_webif_password", "notify.smtp.password", "notify.telegram.bot_token"}
@@ -71,6 +77,7 @@ def meta(ctx: AuthContext = Depends(current_user)):
             "auth:jwt+api-key",
             "notify:expiry-email",
             "notify:expiry-telegram",
+            "billing:ecm-usage",
         ],
     }
 

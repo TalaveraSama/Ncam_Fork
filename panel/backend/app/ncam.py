@@ -12,6 +12,7 @@ NCam-NG Panel :: integración con el daemon NCam.
 from __future__ import annotations
 
 import base64
+import hashlib
 import json
 import socket
 import sqlite3
@@ -187,6 +188,57 @@ def fetch_status(conn: Optional[sqlite3.Connection] = None) -> dict[str, Any]:
         },
         "clients_shown": _to_int(status_block.get("ucs")),
         "readers_shown": _to_int(status_block.get("rcs")),
+    }
+
+
+def user_md5(username: str) -> str:
+    """Identificador que usa el API de NCam para cada cuenta (``id_<md5>``)."""
+    return "id_" + hashlib.md5(username.encode("utf-8")).hexdigest()
+
+
+def fetch_user_stats(conn: Optional[sqlite3.Connection] = None) -> dict[str, Any]:
+    """Estadísticas por cuenta del daemon (``part=userstats``).
+
+    Devuelve ``{"reachable": bool, "users": {username: {...}}}``. El API identifica
+    cada cuenta con ``id_<md5(usuario)>``, por lo que se traduce de vuelta al
+    nombre real para poder cruzar los datos con las líneas del panel.
+    """
+    try:
+        payload = _get_json(
+            "/ncamapi.json",
+            {"part": "userstats"},
+            credentials=_credentials(conn),
+            base_url=_webif_url(conn),
+        )
+    except NcamUnavailable as exc:
+        return {"reachable": False, "error": str(exc), "users": {}}
+
+    ncam = (payload or {}).get("ncam") or {}
+    users: dict[str, dict[str, Any]] = {}
+    for entry in ncam.get("users") or []:
+        block = entry.get("user") if isinstance(entry, dict) else None
+        if not isinstance(block, dict):
+            continue
+        md5id = str(block.get("usermd5") or "")
+        stats = block.get("stats") or {}
+        users[md5id] = {
+            "status": block.get("status"),
+            "classname": block.get("classname"),
+            "expdate": block.get("expdate"),
+            "groups": block.get("groups"),
+            "ecm_ok": _to_int(stats.get("cwok")),
+            "ecm_nok": _to_int(stats.get("cwnok")),
+            "ecm_from_cache": _to_int(stats.get("cwcache")),
+            "ecm_timeout": _to_int(stats.get("cwtimeout")),
+            "emm_ok": _to_int(stats.get("emmok")),
+            "emm_nok": _to_int(stats.get("emmnok")),
+        }
+
+    return {
+        "reachable": True,
+        "version": ncam.get("version"),
+        "revision": ncam.get("revision"),
+        "users": users,
     }
 
 

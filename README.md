@@ -101,6 +101,15 @@ PYTHONPATH=backend python3 -m app.seed --demo
 | **reseller** | Gestiona **sus** líneas y **sus** usuarios finales, con saldo de créditos que se descuenta al crear/renovar líneas; puede transferir créditos a sus usuarios y rotar su API key. No ve datos de otros resellers. |
 | **user** | Solo lectura de sus propias líneas (credenciales, caducidad) y su saldo. |
 
+### Consumo y facturación por ECM
+
+El panel lee del daemon las ECM servidas por cada cuenta y factura al propietario
+los **bloques completos** (`billing.ecm.block` ECM a `billing.ecm.price`
+créditos), nunca por adelantado: si el saldo no alcanza, el resto queda pendiente.
+Incluye libro mayor, histórico de mediciones, detección de reinicio del daemon y
+suspensión opcional por deuda. Vista **Consumo ECM** y endpoints
+`/api/v1/billing/ecm*`.
+
 ### Avisos de caducidad
 
 El panel avisa (por **email** y/o **Telegram**) cuando una línea está a punto de

@@ -17,7 +17,7 @@ from typing import Any, Iterable, Iterator, Optional
 from .config import settings
 
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 
 SCHEMA = """
 PRAGMA journal_mode = WAL;
@@ -70,6 +70,8 @@ CREATE TABLE IF NOT EXISTS lines (
     notify_email      TEXT,                              -- destino de los avisos (si vacío: email del propietario)
     notify_telegram   TEXT,                              -- chat_id de Telegram (si vacío: chat por defecto del panel)
     notify_days       INTEGER NOT NULL DEFAULT 0,        -- días de antelación propios (0 = usar el global)
+    ecm_total         INTEGER NOT NULL DEFAULT 0,        -- último contador de ECM leído del daemon
+    ecm_billed        INTEGER NOT NULL DEFAULT 0,        -- ECM ya facturadas al propietario
     notes             TEXT,
     created_at        TEXT    NOT NULL,
     updated_at        TEXT    NOT NULL,
@@ -161,6 +163,23 @@ CREATE TABLE IF NOT EXISTS login_attempts (
 );
 
 CREATE INDEX IF NOT EXISTS idx_login_attempts ON login_attempts(username, created_at);
+
+-- Consumo de ECM por línea y su facturación
+CREATE TABLE IF NOT EXISTS ecm_usage (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    line_id      INTEGER REFERENCES lines(id) ON DELETE CASCADE,
+    owner_id     INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    measured_at  TEXT    NOT NULL,
+    ecm_ok       INTEGER NOT NULL,          -- contador acumulado en el daemon
+    ecm_delta    INTEGER NOT NULL,          -- ECM nuevas desde la medición anterior
+    ecm_billed   INTEGER NOT NULL DEFAULT 0,-- ECM incluidas en bloques facturados
+    blocks       INTEGER NOT NULL DEFAULT 0,
+    credits      INTEGER NOT NULL DEFAULT 0,
+    note         TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_ecm_usage_line ON ecm_usage(line_id, measured_at);
+CREATE INDEX IF NOT EXISTS idx_ecm_usage_date ON ecm_usage(measured_at);
 
 -- Avisos de caducidad enviados (email/telegram), evita duplicados
 CREATE TABLE IF NOT EXISTS notification_log (
@@ -260,6 +279,13 @@ def _migrate(conn: sqlite3.Connection, from_version: int) -> None:
         ):
             if column not in line_columns:
                 conn.execute(ddl)
+    if from_version < 4:
+        for column, ddl in (
+            ("ecm_total", "ALTER TABLE lines ADD COLUMN ecm_total INTEGER NOT NULL DEFAULT 0"),
+            ("ecm_billed", "ALTER TABLE lines ADD COLUMN ecm_billed INTEGER NOT NULL DEFAULT 0"),
+        ):
+            if column not in line_columns:
+                conn.execute(ddl)
 
 
 DEFAULT_SETTINGS = {
@@ -290,6 +316,12 @@ DEFAULT_SETTINGS = {
     "notify.smtp.starttls": "1",
     "notify.telegram.bot_token": "",
     "notify.telegram.chat_id": "",
+    # facturación por consumo de ECM
+    "billing.ecm.enabled": "0",
+    "billing.ecm.price": "10",          # créditos por bloque
+    "billing.ecm.block": "1000",        # ECM por bloque
+    "billing.ecm.interval_seconds": "900",
+    "billing.ecm.suspend_on_debt": "0",
     # datos publicados a los clientes finales
     "panel.public_host": "TU_SERVIDOR",
     "panel.port.cccam": "12000",

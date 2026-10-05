@@ -202,3 +202,12 @@ class NotificationRunRequest(BaseModel):
 class NotificationTestRequest(BaseModel):
     channel: Literal["email", "telegram"]
     target: Optional[str] = Field(default=None, max_length=200)
+
+
+# ---------------------------------------------------------------------------
+# facturación por consumo de ECM
+# ---------------------------------------------------------------------------
+class BillingRunRequest(BaseModel):
+    dry_run: bool = False
+    owner_id: Optional[int] = Field(default=None, ge=1)
+    line_id: Optional[int] = Field(default=None, ge=1)

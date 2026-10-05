@@ -239,6 +239,7 @@ const NAV = [
   { id: "lines", label: "Líneas", icon: "▤", roles: ["super_admin", "reseller", "user"] },
   { id: "accounts", label: "Revendedores y usuarios", icon: "👥", roles: ["super_admin", "reseller"] },
   { id: "cache", label: "Caché y peers", icon: "⚡", roles: ["super_admin", "reseller"] },
+  { id: "usage", label: "Consumo ECM", icon: "🧮", roles: ["super_admin", "reseller"] },
   { id: "notifications", label: "Avisos de caducidad", icon: "🔔", roles: ["super_admin", "reseller"] },
   { id: "stats", label: "Estadísticas", icon: "📈", roles: ["super_admin", "reseller", "user"] },
   { id: "transactions", label: "Créditos", icon: "🪙", roles: ["super_admin", "reseller", "user"] },
@@ -1072,6 +1073,105 @@ async function viewTransactions(el) {
   $("#tx-reload", el).onclick = () => renderView();
 }
 
+/* --------------------------------------------------------------- consumo */
+async function viewUsage(el) {
+  const [usage, history] = await Promise.all([
+    api("/billing/ecm"),
+    api("/billing/ecm/history?limit=50"),
+  ]);
+  const conf = usage.settings;
+
+  el.innerHTML = `
+    <div class="grid two">
+      <div class="card">
+        <h3>Tarifa por consumo</h3>
+        <p class="muted small">El consumo se mide leyendo del daemon las ECM servidas por cada
+          cuenta y se factura por bloques completos. Nunca se cobra por adelantado.</p>
+        <div class="grid three" style="margin-top:8px">
+          <div><p class="hint">Facturación</p><div class="value">${conf.enabled ? "activa" : "manual"}</div></div>
+          <div><p class="hint">Bloque</p><div class="value">${fmtNumber(conf.block)} ECM</div></div>
+          <div><p class="hint">Precio</p><div class="value">${fmtNumber(conf.price)} ${esc(usage.currency)}</div></div>
+        </div>
+        ${conf.suspend_on_debt ? '<p class="hint">Las líneas con consumo impagado se suspenden.</p>' : ""}
+      </div>
+      <div class="card">
+        <h3>Facturar ahora</h3>
+        <p class="muted small">Mide el consumo en el daemon y descuenta los bloques completos
+          pendientes del saldo del propietario. La simulación no cobra nada.</p>
+        <div class="toolbar" style="margin-top:12px">
+          <button class="btn ghost" id="ecm-dry">Simular facturación</button>
+          <button class="btn primary" id="ecm-run">Medir y facturar</button>
+          <button class="btn blue" id="ecm-refresh">${state.user.role === "super_admin" ? "Solo medir" : ""}</button>
+        </div>
+        <pre id="ecm-report" class="hint" style="white-space:pre-wrap;margin-top:10px"></pre>
+      </div>
+    </div>
+    <div class="card wide">
+      <h3>Consumo por línea</h3>
+      ${usage.items.length ? `<div class="table-wrap"><table>
+        <thead><tr><th>Línea</th><th>Usuario</th><th>Propietario</th><th>ECM servidas</th>
+          <th>ECM facturadas</th><th>Pendientes</th><th>Bloques</th><th>Importe pendiente</th></tr></thead>
+        <tbody>${usage.items.map((item) => `<tr>
+          <td><strong>${esc(item.line)}</strong><div class="hint">${esc(item.protocol)}</div></td>
+          <td><code>${esc(item.username)}</code></td>
+          <td>${esc(item.owner)}</td>
+          <td>${fmtNumber(item.ecm_total)}</td>
+          <td>${fmtNumber(item.ecm_billed)}</td>
+          <td>${fmtNumber(item.ecm_pending)}</td>
+          <td>${fmtNumber(item.blocks_pending)}</td>
+          <td>${fmtNumber(item.credits_pending)} ${esc(usage.currency)}</td>
+        </tr>`).join("")}</tbody></table></div>`
+        : `<p class="empty small">No hay líneas con contadores de ECM todavía.
+             Exporte las líneas al daemon y pulse «Medir y facturar».</p>`}
+    </div>
+    <div class="card wide">
+      <h3>Últimas mediciones y cargos</h3>
+      ${history.items.length ? `<div class="table-wrap"><table>
+        <thead><tr><th>Fecha</th><th>Línea</th><th>Contador</th><th>Nuevas ECM</th>
+          <th>Bloques cobrados</th><th>Créditos</th><th>Nota</th></tr></thead>
+        <tbody>${history.items.map((row) => `<tr>
+          <td class="nowrap">${fmtDate(row.measured_at, true)}</td>
+          <td>${esc(row.line_name || row.line_id || "—")}</td>
+          <td>${fmtNumber(row.ecm_ok)}</td>
+          <td>${row.ecm_delta ? `+${fmtNumber(row.ecm_delta)}` : "0"}</td>
+          <td>${fmtNumber(row.blocks)}</td>
+          <td>${row.credits ? fmtNumber(row.credits) : "—"}</td>
+          <td>${esc(row.note || "")}</td>
+        </tr>`).join("")}</tbody></table></div>`
+        : `<p class="empty small">Sin mediciones registradas.</p>`}
+    </div>`;
+
+  const report = (data) => {
+    const lines = data.lines || [];
+    const summary = [
+      `Enviados a facturar: ${lines.length} línea(s)`,
+      `Bloques cobrados: ${data.billed_blocks} · Créditos: ${data.billed_credits} ${data.currency || ""}`,
+      data.measurement && data.measurement.reachable === false
+        ? `Daemon inalcanzable: ${data.measurement.error}`
+        : `Medición: ${data.measurement ? data.measurement.updated : 0} línea(s) actualizadas`,
+      data.skipped.length ? `Avisos: ${data.skipped.map((s) => s.reason).join("; ")}` : "",
+    ].filter(Boolean).join("\n");
+    $("#ecm-report", el).textContent = summary;
+  };
+
+  $("#ecm-dry", el).onclick = async () => report(await api("/billing/ecm/run", { method: "POST", body: { dry_run: true } }));
+  $("#ecm-run", el).onclick = async () => {
+    const data = await api("/billing/ecm/run", { method: "POST", body: {} });
+    report(data);
+    toast(`Consumo facturado: ${data.billed_credits} créditos`);
+    renderView();
+  };
+  const refreshBtn = $("#ecm-refresh", el);
+  if (state.user.role === "super_admin") {
+    refreshBtn.onclick = async () => {
+      const data = await api("/billing/ecm/refresh", { method: "POST" });
+      $("#ecm-report", el).textContent = JSON.stringify(data.measured || data, null, 1);
+    };
+  } else {
+    refreshBtn.style.display = "none";
+  }
+}
+
 /* ---------------------------------------------------------- notificaciones */
 async function viewNotifications(el) {
   const isAdmin = state.user.role === "super_admin";
@@ -1219,6 +1319,11 @@ const SETTING_LABELS = {
   "notify.smtp.starttls": "Usar STARTTLS (1/0)",
   "notify.telegram.bot_token": "Token del bot de Telegram",
   "notify.telegram.chat_id": "Chat de Telegram por defecto",
+  "billing.ecm.enabled": "Facturar automáticamente el consumo de ECM (1/0)",
+  "billing.ecm.price": "Créditos por bloque de ECM",
+  "billing.ecm.block": "ECM por bloque facturable",
+  "billing.ecm.interval_seconds": "Segundos entre mediciones de consumo",
+  "billing.ecm.suspend_on_debt": "Suspender líneas con consumo impagado (1/0)",
 };
 
 async function viewSettings(el) {
@@ -1300,6 +1405,7 @@ const VIEWS = {
   stats: { title: "Estadísticas", subtitle: "Métricas históricas y avisos de caducidad", render: viewStats },
   transactions: { title: "Créditos", subtitle: "Libro mayor de movimientos", render: viewTransactions },
   notifications: { title: "Avisos de caducidad", subtitle: "Recordatorios por email y Telegram", render: viewNotifications },
+  usage: { title: "Consumo de ECM", subtitle: "Medición y facturación por bloques", render: viewUsage },
   audit: { title: "Auditoría", subtitle: "Registro de acciones sensibles", render: viewAudit },
   settings: { title: "Ajustes", subtitle: "Configuración global y mantenimiento", render: viewSettings },
 };

@@ -204,6 +204,40 @@ Reglas anti-spam: nunca se repite un aviso para la misma línea y canal con los
 mismos días restantes, ni dos veces en 20 horas; los envíos fallidos se
 reintentan en la siguiente pasada y quedan registrados con su error.
 
+## 3.2 Facturación por consumo de ECM
+
+El daemon publica en `part=userstats` el contador de ECM servidas por cada cuenta
+(`cwok`). El panel cruza ese dato con sus líneas (mismo usuario) y factura por
+**bloques completos**, nunca por adelantado:
+
+| Ajuste | Descripción |
+| --- | --- |
+| `billing.ecm.enabled` | facturación automática periódica (`1`/`0`; por defecto manual) |
+| `billing.ecm.block` | ECM por bloque facturable (por defecto 1000) |
+| `billing.ecm.price` | créditos por bloque |
+| `billing.ecm.interval_seconds` | cada cuánto mide y factura (por defecto 900) |
+| `billing.ecm.suspend_on_debt` | suspender la línea si acumula consumo impagado |
+
+```
+GET  /api/v1/billing/ecm                 consumo y pendiente por línea
+GET  /api/v1/billing/ecm/history         mediciones y cargos
+POST /api/v1/billing/ecm/run             mide y factura (dry_run para simular)
+POST /api/v1/billing/ecm/refresh         solo mide (super admin)
+```
+
+Detalles:
+
+* El contador del daemon se reinicia si el daemon se reinicia: el panel lo
+  detecta, anota «reinicio del daemon» y no inventa consumo.
+* Si el saldo del propietario no cubre todos los bloques, se cobran los que
+  alcance y el resto queda pendiente para la siguiente pasada.
+* Las cuentas **super admin** no se facturan a sí mismas.
+* Cada cargo queda en el libro mayor con el detalle (`Consumo de N ECM de la
+  línea X`) y cada medición en `ecm_usage`.
+
+Para probarlo sin daemon: `python3 tools/mock_ncam_webif.py --port 8181
+--users msh1b1lz4n,demo_linea` y apunte `panel.ncam_webif_url` al simulador.
+
 ## 4. Integración con el daemon NCam
 
 1. En `ncam.conf` habilite el WebIf e **incluya el motor de caché v2**:
