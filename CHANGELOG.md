@@ -44,6 +44,12 @@
   en uso (la de los ajustes, no solo la del entorno).
 * Nueva guía [`INSTALL.md`](INSTALL.md) con la instalación completa (compilación,
   configuración, systemd, actualizaciones y problemas frecuentes).
+* Nuevo `devtools/install-panel.sh`: prepara el panel desde la raíz del repositorio
+  (entorno virtual en `panel/.venv`, dependencias, `.env` con secreto generado y
+  super administrador) de forma idempotente.
+* `panel/run.sh` usa el entorno virtual si existe (sin tener que activarlo), carga
+  `panel/.env` con un analizador tolerante (comentarios y valores con espacios) y
+  respeta las variables del entorno por encima del `.env`.
 * Nuevo `devtools/install-daemon.sh`: instala el binario final (excluye siempre el
   `.debug`), prefiere el del commit actual, avisa si el binario está desfasado y
   copia los ejemplos de configuración sin sobrescribir los existentes.

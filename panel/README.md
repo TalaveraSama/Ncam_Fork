@@ -21,13 +21,14 @@ créditos). Incluye además un rol de **usuario final** de solo lectura.
 > [`../INSTALL.md`](../INSTALL.md).
 
 ```bash
-cd panel
-python3 -m venv .venv && . .venv/bin/activate
-pip install -r requirements.txt
+# desde la raíz del repositorio (requirements.txt está en panel/)
+devtools/install-panel.sh --demo      # venv + dependencias + .env + super admin
 
-cp .env.example .env        # ajuste la URL del WebIf de NCam y el secreto
-./run.sh                    # http://localhost:8080
+cd panel && ./run.sh                  # http://localhost:8080
 ```
+
+A mano: `cd panel && python3 -m venv .venv && . .venv/bin/activate && pip install
+-r requirements.txt && cp .env.example .env && ./run.sh`.
 
 Crear el **super administrador** (la contraseña se muestra una única vez):
 

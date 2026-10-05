@@ -175,6 +175,22 @@ sudo apt install -y python3 python3-venv python3-pip
 
 ### 2. Instalar y configurar
 
+Desde la **raíz** del repositorio (el `requirements.txt` está en `panel/`, no en
+la raíz; si lo ejecutas desde el sitio equivocado verás
+`Could not open requirements file`):
+
+```bash
+sudo apt install -y python3-venv python3-pip      # si falta
+devtools/install-panel.sh                          # venv + dependencias + .env + super admin
+devtools/install-panel.sh --demo                   # además, datos de demostración
+```
+
+El script crea `panel/.venv`, instala `fastapi`/`uvicorn`, copia
+`.env.example` a `panel/.env`, **genera el `NCAM_PANEL_SECRET`** y crea el super
+administrador (imprime la contraseña una sola vez). Es idempotente.
+
+A mano (equivalente):
+
 ```bash
 cd Ncam_Fork/panel
 python3 -m venv .venv
@@ -212,8 +228,12 @@ PYTHONPATH=backend python3 -m app.seed --demo
 ### 4. Arrancar
 
 ```bash
+cd Ncam_Fork/panel
 ./run.sh                 # http://TU_IP:8080
 ```
+
+`run.sh` usa `panel/.venv` si existe (no hace falta activarlo), carga `panel/.env`
+(dejando mandar a las variables que ya estén en el entorno) y arranca uvicorn.
 
 Entra con el super admin y revisa:
 
@@ -287,6 +307,8 @@ esquema v4 añade las columnas de avisos y de consumo de ECM).
 | El WebIf no responde en la red local | Ajusta `httpallowed` y `httpport` en `[webif]`, y abre el puerto en el cortafuegos. |
 | Los avisos de caducidad no se envían | Activa `notify.enabled`, el canal (`notify.channel.email` / `notify.channel.telegram`) y rellena `notify.smtp.*` o el token del bot. |
 | La facturación por ECM no cobra | Debe haber **bloques completos** servidos (`billing.ecm.block`), saldo del propietario y las líneas exportadas al daemon como cuentas. |
+| `Could not open requirements file: requirements.txt` | Estás en la raíz del repo: `pip install -r panel/requirements.txt`, o mejor `cd panel` (o usa `devtools/install-panel.sh`). |
+| `.venv` creado en la raíz del repo por error | El entorno del panel va en `panel/.venv`: borra el de la raíz (`rm -rf .venv`) y ejecuta `devtools/install-panel.sh`. |
 | `ModuleNotFoundError: No module named 'app'` | Ejecuta siempre desde `panel/` con `PYTHONPATH=backend` (o usa `./run.sh`). |
 
 Para probar el panel **sin daemon**: `python3 panel/tools/mock_ncam_webif.py

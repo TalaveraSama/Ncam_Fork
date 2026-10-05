@@ -77,6 +77,9 @@ Ubicado en `panel/`. Se instala en segundos y se conecta al WebIf de NCam para
 leer, en vivo, las métricas del motor de caché.
 
 ```bash
+devtools/install-panel.sh --demo     # venv + dependencias + .env + super admin
+
+# equivalente a mano:
 cd panel
 python3 -m venv .venv && . .venv/bin/activate
 pip install -r requirements.txt
