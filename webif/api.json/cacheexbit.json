@@ -1,0 +1,16 @@
+    ##JSONDELIMITER##{
+    "dirimg":"##DIRECTIONIMG##",
+    "type":"##TYPE##",
+    "name":"##NAME##",
+    "ip":"##IP##",
+    "node":"##NODE##",
+    "level":"##LEVEL##",
+    "push":"##PUSH##",
+    "pushlg":"##PUSHLG##",
+    "got":"##GOT##",
+    "gotlg":"##GOTLG##",
+    "hit":"##HIT##",
+    "cwinfo":"##CWCINFO##",
+    "errcw":"##ERRCW##",
+    "err":"##ERR##"
+    }

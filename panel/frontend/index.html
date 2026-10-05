@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NCam-NG Panel</title>
+<link rel="stylesheet" href="/static/styles.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🛰️</text></svg>">
+</head>
+<body>
+
+<!-- ---------------------------------------------------------------- login -->
+<section id="login-view" class="login-wrap">
+  <form id="login-form" class="login-card" autocomplete="on">
+    <div class="brand">
+      <div class="brand-mark">NG</div>
+      <div>
+        <h1>NCam-NG Panel</h1>
+        <p class="muted">Gestión de líneas, revendedores y motor de caché</p>
+      </div>
+    </div>
+    <label>Usuario
+      <input type="text" id="login-username" required autocomplete="username" placeholder="admin">
+    </label>
+    <label>Contraseña
+      <input type="password" id="login-password" required autocomplete="current-password" placeholder="••••••••">
+    </label>
+    <button type="submit" class="btn primary block" id="login-submit">Entrar</button>
+    <p id="login-error" class="error hidden"></p>
+    <p class="muted small center">
+      Roles: <strong>super admin</strong> (control total) · <strong>reseller</strong> (sus líneas y usuarios)
+    </p>
+  </form>
+</section>
+
+<!-- ------------------------------------------------------------ aplicación -->
+<div id="app-view" class="app hidden">
+  <aside class="sidebar">
+    <div class="brand small">
+      <div class="brand-mark">NG</div>
+      <div><strong>NCam-NG</strong><span class="muted block small" id="brand-sub">Panel v2</span></div>
+    </div>
+    <nav id="nav"></nav>
+    <div class="sidebar-footer">
+      <div class="user-box">
+        <div class="avatar" id="user-avatar">?</div>
+        <div>
+          <strong id="user-name">—</strong>
+          <span class="badge" id="user-role">—</span>
+        </div>
+      </div>
+      <div class="credits" id="user-credits" title="Saldo de créditos"></div>
+      <button class="btn ghost small block" id="logout-btn">Cerrar sesión</button>
+    </div>
+  </aside>
+
+  <main class="content">
+    <header class="topbar">
+      <div>
+        <h2 id="view-title">Panel</h2>
+        <p class="muted small" id="view-subtitle"></p>
+      </div>
+      <div class="topbar-actions">
+        <span class="pill" id="ncam-pill" title="Estado del daemon NCam">NCam: —</span>
+        <button class="btn ghost small" id="refresh-btn">Actualizar</button>
+      </div>
+    </header>
+    <section id="view" class="view"></section>
+  </main>
+</div>
+
+<div id="modal-root"></div>
+<div id="toast-root" class="toast-root"></div>
+
+<script src="/static/app.js"></script>
+</body>
+</html>

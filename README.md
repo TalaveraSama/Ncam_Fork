@@ -1,1 +1,149 @@
-# Ncam_Fork
+# NCam-NG
+
+**NCam-NG** es la evolución de [NCam](https://github.com/fairbird/NCam) (a su vez
+basado en [OSCam](https://svn.streamboard.tv/oscam/trunk/) y
+[oscam-emu](https://github.com/oscam-emu/oscam-patched)) con dos aportaciones
+principales:
+
+1. **Motor de caché v2** dentro del daemon: monitorización completa, límite de
+   capacidad con expulsión LRU, API JSON nativa y contadores de rendimiento.
+2. **Panel de gestión web** (`panel/`) con roles de **super administrador** y
+   **reseller**: líneas, créditos, usuarios finales, peers de caché, auditoría y
+   métricas — integrado con el motor de caché del daemon.
+
+> Copyright: NCam-NG mantiene la licencia **GPL v3** del proyecto original.
+> NCam es Copyright (C) 2012-2018 Javilonas y Copyright (C) 2015-2025 RAED
+> (Fairbird); OSCam es Copyright (C) 2009-2026 de los desarrolladores de OSCam.
+
+---
+
+## 1. Motor de caché v2 (NCam-NG)
+
+### Qué se añadió
+
+| Función | Descripción |
+|---|---|
+| **Estadísticas internas** | Contadores de consultas, aciertos, fallos, CW nuevas/actualizadas, rechazos por ciclo CW, expulsiones por TTL y por capacidad, y estimación de memoria. |
+| **Capacidad con LRU** | Nueva opción `[cache] max_entries`: cuando la caché alcanza el límite se expulsan las entradas menos usadas recientemente (por `upd_time`), en lotes para mantener corto el bloqueo de escritura. |
+| **Endurización del *hot path*** | El contaje se hace sin locks adicionales y con un único punto de salida en `check_cache()`. |
+| **Código refactorizado** | La liberación de un contenedor ECM (`cache_free_ecmhash()`) se comparte entre la limpieza periódica y la expulsión LRU; `cleanup_cache()` usa una sola marca de tiempo por barrido. |
+| **API JSON** | `GET /ncamapi.json?part=cachestats` con todo el estado del motor, incluidas las CW más servidas y el histórico de aciertos; `&action=reset` reinicia los contadores. |
+| **Pruebas** | `devtools/run-cache-test.sh` compila el motor real (`ncam-cache.c`) contra stubs y verifica inserciones, aciertos, contabilidad, capacidad/LRU y expiración. |
+
+### Configuración
+
+```ini
+[cache]
+delay        = 120
+max_time     = 15      ; segundos que un ECM permanece en la caché
+max_entries  = 0       ; NCam-NG: 0 = ilimitado; p. ej. 200000 en equipos con poca RAM
+max_hit_time = 15
+```
+
+### Consulta de métricas
+
+```bash
+curl -s "http://127.0.0.1:8181/ncamapi.json?part=cachestats" | jq .ncam.cachestats
+```
+
+```json
+{
+  "engine": "NCam-NG cache engine",
+  "max_entries": "0", "max_time": "15",
+  "entries": "137", "cw_entries": "168", "mem_bytes": "124224",
+  "lookups": "49415", "hits": "41241", "misses": "8174", "hit_ratio": "83.46",
+  "cw_new": "15421", "cw_upd": "25811", "cwc_rejected": "3",
+  "evicted_ttl": "9820", "evicted_lru": "0",
+  "cw_cache": { "entries": "42", "mem_bytes": "20480", "localgenerated": "7" },
+  "hot_entries": [
+    { "caid": "0100", "prid": "000000", "srvid": "0001", "hits": "8421",
+      "from_csp": "0", "from_cacheex": "1", "from_localcards": "0" }
+  ]
+}
+```
+
+### Pruebas del motor de caché
+
+```bash
+devtools/run-cache-test.sh     # no requiere compilar el daemon completo
+```
+
+---
+
+## 2. Panel de gestión (super admin + reseller)
+
+Ubicado en `panel/`. Se instala en segundos y se conecta al WebIf de NCam para
+leer, en vivo, las métricas del motor de caché.
+
+```bash
+cd panel
+python3 -m venv .venv && . .venv/bin/activate
+pip install -r requirements.txt
+
+# variables de entorno (o copiar .env.example a .env)
+export NCAM_WEBIF_URL="http://127.0.0.1:8181"
+export NCAM_PANEL_SECRET="$(python3 -c 'import secrets;print(secrets.token_urlsafe(48))')"
+
+# crea el super administrador (imprime la contraseña una sola vez)
+PYTHONPATH=backend python3 -m app.seed --username admin
+# (opcional) datos de demostración
+PYTHONPATH=backend python3 -m app.seed --demo
+
+./run.sh          # http://localhost:8080
+```
+
+### Roles
+
+| Rol | Permisos |
+|---|---|
+| **super_admin** | Control total: crea/edita **resellers** y usuarios, emite y ajusta créditos, define ajustes globales y del motor de caché, ve toda la auditoría. |
+| **reseller** | Gestiona **sus** líneas y **sus** usuarios finales, con saldo de créditos que se descuenta al crear/renovar líneas; puede transferir créditos a sus usuarios y rotar su API key. No ve datos de otros resellers. |
+| **user** | Solo lectura de sus propias líneas (credenciales, caducidad) y su saldo. |
+
+Detalles completos en [`panel/README.md`](panel/README.md).
+
+---
+
+## 3. Compilación del daemon
+
+Igual que el NCam original (Makefile / CMake con soporte de toolchains):
+
+```bash
+./config.sh --enable all            # o ./config.sh --help para opciones
+make -j"$(nproc)"
+```
+
+El binario resultante es `ncam` (o `oscam` según `--oscam`). Consulta
+`Distribution/doc/` para la documentación de configuración clásica.
+
+---
+
+## 4. Estructura del repositorio
+
+```
+├── ncam-cache.c / ncam-cache.h     # motor de caché (v2: estadísticas + LRU)
+├── module-webif.c                  # endpoint /ncamapi.json?part=cachestats
+├── webif/api.json/cachestats*.json # plantillas JSON del nuevo endpoint
+├── devtools/cache-engine-test.c    # banco de pruebas del motor de caché
+├── devtools/run-cache-test.sh
+├── Distribution/doc/example/ncam.conf
+├── docs/cache-engine.md            # documentación técnica del motor v2
+└── panel/                          # panel de gestión (super admin / reseller)
+    ├── backend/app/                # API FastAPI + SQLite
+    ├── backend/tests/              # 38 pruebas automatizadas
+    ├── frontend/                   # SPA en JavaScript puro
+    └── tools/mock_ncam_webif.py    # simulador del WebIf para desarrollo
+```
+
+## 5. Pruebas
+
+```bash
+devtools/run-cache-test.sh                        # motor de caché (C)
+cd panel/backend && python3 -m pytest             # API del panel (Python)
+```
+
+## 6. Aviso legal
+
+Este software se distribuye bajo **GPL v3** (ver `COPYING`). Debe usarse
+únicamente con contenido y tarjetas a los que el operador esté autorizado a
+acceder. Los autores no se responsabilizan del uso indebido.
