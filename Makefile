@@ -2,7 +2,7 @@ SHELL = /bin/sh
 
 .SUFFIXES:
 .SUFFIXES: .o .c
-.PHONY: all tests help README.build README.config simple default debug config menuconfig allyesconfig allnoconfig defconfig clean distclean
+.PHONY: all tests help README.build README.config simple default debug config menuconfig allyesconfig allnoconfig defconfig clean distclean FORCE
 
 VER := $(shell ./config.sh --ncam-version)
 REV := $(shell ./config.sh --ncam-revision)
@@ -607,6 +607,24 @@ $(LIST_SMARGO_BIN): utils/list_smargo.c
 $(OBJDIR)/config.o: $(OBJDIR)/config.c
 	$(SAY) "CONF	$<"
 	$(Q)$(CC) $(STD_DEFS) $(CC_OPTS) $(CC_WARN) $(CFLAGS) -c $< -o $@
+
+# NCam-NG: la revisión se inyecta como -DCS_REVISION, pero make no detecta
+# cambios de flags: sin esto, los objetos que la incrustan siguen diciendo la
+# revisión antigua tras cambiar de commit. El sello solo se reescribe cuando la
+# revisión cambia, así que únicamente se recompilan esos ficheros.
+REV_STAMP := $(OBJDIR)/.revision
+REV_SOURCES := ncam.c ncam-log.c module-webif.c module-webif-tpl.c module-cccam.c module-dvbapi.c module-lcd.c module-monitor.c
+REV_OBJS := $(addprefix $(OBJDIR)/,$(REV_SOURCES:.c=.o))
+
+$(REV_STAMP): FORCE
+	@mkdir -p $(OBJDIR)
+	@if [ "$$(cat $(REV_STAMP) 2>/dev/null)" != "$(REV)" ]; then \
+		echo "$(REV)" > $(REV_STAMP); \
+	fi
+
+$(REV_OBJS): $(REV_STAMP)
+
+FORCE:
 
 $(OBJDIR)/%.o: %.c Makefile
 	@$(CC) -MP -MM -MT $@ -o $(subst .o,.d,$@) $<
