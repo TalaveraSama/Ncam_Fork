@@ -146,7 +146,8 @@ static void tpl_add_group_limit_vars(struct templatevars *vars)
 #define MNU_CACHEEX          8
 #define MNU_SCRIPT           9
 #define MNU_SHUTDOWN        10
-#define MNU_TOTAL_ITEMS     11 // sum of items above
+#define MNU_CACHEENGINE     11 // NCam-NG: cache engine monitoring page
+#define MNU_TOTAL_ITEMS     12 // sum of items above
 
 /* constants for config.html submenuactivating */
 #define MNU_CFG_GLOBAL       0
@@ -640,9 +641,14 @@ static void setActiveMenu(struct templatevars *vars, int8_t active)
 		else
 			{ tpl_addVar(vars, TPLADD, tpl_getVar(vars, "TMP"), "menu"); }
 	}
-	#ifdef WEBIF_LIVELOG
+#ifdef WEBIF_LIVELOG
 			tpl_addVar(vars, TPLADD, "LOGPAGEMENU", tpl_getTpl(vars, "LOGMENU"));
-	#endif
+#endif
+#ifdef CS_CACHEEX
+	tpl_addVar(vars, TPLADD, "CACHEEXMENUITEM", tpl_getTpl(vars, "CACHEEXMENUITEM"));
+#endif
+	// NCam-NG: the cache engine page is always available (it is part of the core)
+	tpl_addVar(vars, TPLADD, "CACHEENGINEMENUITEM", tpl_getTpl(vars, "CACHEENGINEMENUITEM"));
 }
 
 /*
@@ -8622,6 +8628,155 @@ static char *send_ncam_cacheex(struct templatevars * vars, struct uriparams * pa
 }
 #endif
 
+/* NCam-NG: /cacheengine.html
+ * WebIf page of the internal cache engine: counters, hit ratio, capacity limits,
+ * the control words that were served the most and the last recorded samples.
+ */
+static char *send_ncam_cacheengine(struct templatevars *vars, struct uriparams *params)
+{
+	struct s_cache_stats st;
+	struct s_cache_top_entry hot_entries[CACHE_TOP_ENTRIES_REPORTED];
+	struct timeb history_times[CACHE_HISTORY_REPORTED];
+	struct cache_history_sample history[CACHE_HISTORY_REPORTED];
+	uint32_t hot_count, history_count, i;
+	uint64_t total_lookups;
+	uint32_t hit_ratio;
+
+	setActiveMenu(vars, MNU_CACHEENGINE);
+
+	if(streq(getParam(params, "action"), "reset"))
+	{
+		if(cfg.http_readonly)
+			{ tpl_addMsg(vars, "WebIf is in readonly mode. No changes are possible!"); }
+		else
+		{
+			cache_reset_stats();
+			tpl_addMsg(vars, "Cache engine counters have been reset.");
+		}
+	}
+	else if(streq(getParam(params, "action"), "snapshot"))
+	{
+		add_cache_history_sample();
+		tpl_addMsg(vars, "Cache statistics sample recorded.");
+	}
+
+	cache_get_stats(&st);
+	hot_count = cache_get_top_entries(hot_entries, CACHE_TOP_ENTRIES_REPORTED);
+
+	// keep a small in-memory history without needing user interaction
+	cache_history_sample_if_due(30);
+	history_count = get_cache_history(history, history_times, CACHE_HISTORY_REPORTED);
+
+	total_lookups = st.hits + st.misses;
+	hit_ratio = total_lookups ? (uint32_t)((st.hits * 10000ull) / total_lookups) : 0;
+
+	tpl_addVar(vars, TPLADD, "CACHEENGINE_VERSION", "NCam-NG cache engine v2");
+	tpl_printf(vars, TPLADD, "CACHE_HITRATIO", "%u.%02u", hit_ratio / 100, hit_ratio % 100);
+	if(cfg.cache_max_entries > 0)
+		{ tpl_printf(vars, TPLADD, "CACHE_LIMIT_ENTRIES", "%d", cfg.cache_max_entries); }
+	else
+		{ tpl_addVar(vars, TPLADD, "CACHE_LIMIT_ENTRIES", "unlimited (0)"); }
+	tpl_printf(vars, TPLADD, "CACHE_LIMIT_TIME", "%d", cfg.max_cache_time);
+	tpl_printf(vars, TPLADD, "CACHE_LOOKUPS", "%" PRIu64, st.lookups);
+	tpl_printf(vars, TPLADD, "CACHE_HITS", "%" PRIu64, st.hits);
+	tpl_printf(vars, TPLADD, "CACHE_MISSES", "%" PRIu64, st.misses);
+	tpl_printf(vars, TPLADD, "CACHE_ENTRIES", "%" PRIu64, st.csp_entries);
+	tpl_printf(vars, TPLADD, "CACHE_CW_ENTRIES", "%" PRIu64, st.cw_entries);
+	tpl_printf(vars, TPLADD, "CACHE_MEM_HUMAN", "%s", cache_human_size(st.mem_bytes));
+	tpl_printf(vars, TPLADD, "CACHE_CW_NEW", "%" PRIu64, st.cw_new);
+	tpl_printf(vars, TPLADD, "CACHE_CW_UPD", "%" PRIu64, st.cw_upd);
+	tpl_printf(vars, TPLADD, "CACHE_CWC_REJECTED", "%" PRIu64, st.cwc_rejected);
+	tpl_printf(vars, TPLADD, "CACHE_EVICTED_TTL", "%" PRIu64, st.evicted_ttl);
+	tpl_printf(vars, TPLADD, "CACHE_EVICTED_LRU", "%" PRIu64, st.evicted_lru);
+
+	// cacheex related values (the cw cache only exists with the AIO build)
+	struct
+	{
+		uint64_t cw_cache_entries;
+		uint64_t cw_cache_mem;
+		uint32_t cw_cache_lg;
+		uint32_t peers_total;
+		uint32_t peers_online;
+	} ce;
+	memset(&ce, 0, sizeof(ce));
+#ifdef CS_CACHEEX_AIO
+	struct s_cw_cache_stats cw_cache_st;
+	cw_cache_get_stats(&cw_cache_st);
+	ce.cw_cache_entries = cw_cache_st.entries;
+	ce.cw_cache_mem = cw_cache_st.mem_bytes;
+	ce.cw_cache_lg = cw_cache_st.localgenerated;
+#endif
+#ifdef CS_CACHEEX
+	{
+		// count configured cacheex peers and how many are connected right now
+		struct s_client *cl;
+		struct s_reader *rdr;
+		struct s_auth *account;
+
+		cs_readlock(__func__, &readerlist_lock);
+		cs_readlock(__func__, &clientlist_lock);
+
+		for(rdr = first_active_reader; rdr; rdr = rdr->next)
+		{
+			if(rdr->cacheex.mode > 0) { ce.peers_total++; }
+		}
+		for(account = cfg.account; account; account = account->next)
+		{
+			if(account->cacheex.mode > 0) { ce.peers_total++; }
+		}
+
+		for(cl = first_client; cl; cl = cl->next)
+		{
+			if(cl->kill) { continue; }
+			if((cl->typ == 'r' || cl->typ == 'p') && cl->reader && cl->reader->cacheex.mode > 0)
+				{ ce.peers_online++; }
+			else if(cl->typ == 'c' && cl->account && cl->account->cacheex.mode > 0)
+				{ ce.peers_online++; }
+		}
+
+		cs_readunlock(__func__, &clientlist_lock);
+		cs_readunlock(__func__, &readerlist_lock);
+	}
+#endif
+
+	tpl_printf(vars, TPLADD, "CACHE_CWCACHE_ENTRIES", "%" PRIu64, ce.cw_cache_entries);
+	tpl_printf(vars, TPLADD, "CACHE_CWCACHE_MEM_HUMAN", "%s", cache_human_size(ce.cw_cache_mem));
+	tpl_printf(vars, TPLADD, "CACHE_CWCACHE_LG", "%u", ce.cw_cache_lg);
+	tpl_printf(vars, TPLADD, "CACHE_PEERS_ONLINE", "%u", ce.peers_online);
+	tpl_printf(vars, TPLADD, "CACHE_PEERS_TOTAL", "%u", ce.peers_total);
+
+	for(i = 0; i < hot_count; i++)
+	{
+		tpl_printf(vars, TPLADD, "HOT_CAID", "%04X", hot_entries[i].caid);
+		tpl_printf(vars, TPLADD, "HOT_PRID", "%06X", hot_entries[i].prid);
+		tpl_printf(vars, TPLADD, "HOT_SRVID", "%04X", hot_entries[i].srvid);
+		tpl_printf(vars, TPLADD, "HOT_HITS", "%u", hot_entries[i].hits);
+		tpl_printf(vars, TPLADD, "HOT_FROM_LOCALCARDS", "%u", hot_entries[i].from_localcards);
+		tpl_printf(vars, TPLADD, "HOT_FROM_CACHEEX", "%u", hot_entries[i].from_cacheex);
+		tpl_printf(vars, TPLADD, "HOT_FROM_CSP", "%u", hot_entries[i].from_csp);
+		tpl_addVar(vars, TPLAPPEND, "CACHEHOTROWS", tpl_getTpl(vars, "CACHEENGINEHOTROW"));
+	}
+
+	if(!hot_count)
+		{ tpl_addVar(vars, TPLADD, "CACHEHOTROWS", "<TR><TD COLSPAN=\"7\">No control words stored yet.</TD></TR>"); }
+
+	for(i = 0; i < history_count; i++)
+	{
+		char buffer[32];
+		struct tm tm;
+		localtime_r(&history_times[i].time, &tm);
+		strftime(buffer, sizeof(buffer), "%Y-%m-%d %H:%M:%S", &tm);
+		tpl_addVar(vars, TPLADD, "HISTORY_TIME", buffer);
+		tpl_printf(vars, TPLADD, "HISTORY_VALUE", "%u.%02u", history[i].hit_ratio / 100, history[i].hit_ratio % 100);
+		tpl_addVar(vars, TPLAPPEND, "CACHEHISTORYROWS", tpl_getTpl(vars, "CACHEENGINEHISTORYROW"));
+	}
+
+	if(!history_count)
+		{ tpl_addVar(vars, TPLADD, "CACHEHISTORYROWS", "<TR><TD COLSPAN=\"2\">No samples recorded yet.</TD></TR>"); }
+
+	return tpl_getTpl(vars, "CACHEENGINEPAGE");
+}
+
 /* NCam-NG: /ncamapi.json?part=cachestats
  * Reports the state of the internal cache engine: counters, hit ratio,
  * capacity limits and the control words that were served the most.
@@ -9470,6 +9625,7 @@ static int32_t process_request(FILE * f, IN_ADDR_T in)
 			"/ghttp.html",
 			"/logpoll.html",
 			"/jquery.js",
+			"/cacheengine.html",
 		};
 
 		int32_t pagescnt = sizeof(pages) / sizeof(char *); // Calculate the amount of items in array
@@ -9881,6 +10037,9 @@ static int32_t process_request(FILE * f, IN_ADDR_T in)
 				break;
 			//case 30: jquery.js
 #endif
+			case 31: // NCam-NG: cacheengine.html
+				result = send_ncam_cacheengine(vars, &params);
+				break;
 			default:
 				result = send_ncam_status(vars, &params, 0);
 				break;

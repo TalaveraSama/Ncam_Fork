@@ -27,7 +27,8 @@ principales:
 | **Capacidad con LRU** | Nueva opción `[cache] max_entries`: cuando la caché alcanza el límite se expulsan las entradas menos usadas recientemente (por `upd_time`), en lotes para mantener corto el bloqueo de escritura. |
 | **Endurización del *hot path*** | El contaje se hace sin locks adicionales y con un único punto de salida en `check_cache()`. |
 | **Código refactorizado** | La liberación de un contenedor ECM (`cache_free_ecmhash()`) se comparte entre la limpieza periódica y la expulsión LRU; `cleanup_cache()` usa una sola marca de tiempo por barrido. |
-| **API JSON** | `GET /ncamapi.json?part=cachestats` con todo el estado del motor, incluidas las CW más servidas y el histórico de aciertos; `&action=reset` reinicia los contadores. |
+| **API JSON** | `GET /ncamapi.json?part=cachestats` con todo el estado del motor, incluidas las CW más servidas; `&action=reset` reinicia los contadores. |
+| **Página del WebIf** | `cacheengine.html` en el WebIf clásico: contadores, hit ratio, entradas más servidas, peers cacheex y últimas muestras del histórico (se auto-alimenta cada 30 s). |
 | **Pruebas** | `devtools/run-cache-test.sh` compila el motor real (`ncam-cache.c`) contra stubs y verifica inserciones, aciertos, contabilidad, capacidad/LRU y expiración. |
 
 ### Configuración
@@ -124,6 +125,7 @@ El binario resultante es `ncam` (o `oscam` según `--oscam`). Consulta
 ├── ncam-cache.c / ncam-cache.h     # motor de caché (v2: estadísticas + LRU)
 ├── module-webif.c                  # endpoint /ncamapi.json?part=cachestats
 ├── webif/api.json/cachestats*.json # plantillas JSON del nuevo endpoint
+├── webif/cache/cache.html          # página del motor de caché del WebIf
 ├── devtools/cache-engine-test.c    # banco de pruebas del motor de caché
 ├── devtools/run-cache-test.sh
 ├── Distribution/doc/example/ncam.conf

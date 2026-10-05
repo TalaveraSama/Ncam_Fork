@@ -24,15 +24,23 @@
   (límites, contadores, hit ratio, caché de CW, entradas más servidas) y
   `&action=reset` para reiniciar los contadores.
 * Plantillas `webif/api.json/cachestats.json` y `cachestats_hotbit.json`.
+* **Página del WebIf clásico** `cacheengine.html`: contadores, hit ratio, límites,
+  memoria estimada, CW más servidas, caché de CW de cacheex y peers online/total.
+  Acciones `?action=reset`, `?action=snapshot`; el histórico en memoria se
+  auto-alimenta (`cache_history_sample_if_due(30)`) y `cache_human_size()`
+  formatea los tamaños.
+* Nuevo ítem de menú `CACHE ENGINE` (`MNU_CACHEENGINE`); `setActiveMenu()` añade
+  `CACHEENGINEMENUITEM`/`CACHEEXMENUITEM`, con lo que el menú funciona también
+  en compilaciones sin cacheex.
 * Opción `max_entries` añadida al ejemplo de configuración
   (`Distribution/doc/example/ncam.conf`).
 
 ### Pruebas
 
 * `devtools/cache-engine-test.c` + `devtools/run-cache-test.sh`: compilan el motor
-  de caché real con stubs y verifican 25 comportamientos (inserciones, aciertos,
-  contabilidad, entradas calientes, capacidad con LRU y expiración). No requiere
-  cross-compilar el daemon.
+  de caché real con stubs y verifican 37 comportamientos (inserciones, aciertos,
+  contabilidad, entradas calientes, capacidad con LRU, histórico de muestras,
+  formateo de tamaños y expiración). No requiere cross-compilar el daemon.
 
 ### Panel de gestión (`panel/`)
 

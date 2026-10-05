@@ -262,6 +262,58 @@ static void test_capacity_and_lru(void)
 	free_cache();
 }
 
+static void test_history_and_helpers(void)
+{
+	printf("\n[test] metric history samples and size formatting\n");
+
+	struct cache_history_sample history[CACHE_HISTORY_REPORTED];
+	struct timeb times[CACHE_HISTORY_REPORTED];
+	uint32_t count;
+
+	init_cache();
+	cache_reset_stats();
+
+	check_true("no samples before recording", get_cache_history(history, times, 4) == 0);
+
+	ECM_REQUEST *er = make_ecm(0x00FEED, 0x0E00, 0x000005, 0x0400, 0x50);
+	add_cache(er);
+	ECM_REQUEST *hit = check_cache(er, NULL);
+	if(hit) { free(hit); }
+
+	add_cache_history_sample();
+	add_cache_history_sample();
+
+	count = get_cache_history(history, times, 4);
+	check_true("two samples are kept", count == 2);
+	check_true("newest sample is returned first", count == 2 && times[0].time >= times[1].time);
+	check_true("hit ratio is recorded", count == 2 && history[0].hit_ratio > 0);
+	check_true("sample times are valid", count == 2 && times[0].time > 0);
+
+	// the ring buffer must not overflow
+	add_cache_history_sample();
+	add_cache_history_sample();
+	add_cache_history_sample();
+	count = get_cache_history(history, times, 4);
+	check_true("history is capped at the configured size", count == 4);
+	check_true("requesting less than available works", get_cache_history(history, times, 2) == 2);
+
+	// automatic sampling must respect the minimum interval
+	uint32_t before = get_cache_history(history, times, CACHE_HISTORY_REPORTED);
+	cache_history_sample_if_due(600);
+	check_true("automatic sampling is throttled",
+		get_cache_history(history, times, CACHE_HISTORY_REPORTED) == before);
+	cache_history_sample_if_due(0);
+	check_true("automatic sampling records when due",
+		get_cache_history(history, times, CACHE_HISTORY_REPORTED) == before + 1);
+
+	check_true("bytes are formatted", strcmp(cache_human_size(512), "512 B") == 0);
+	check_true("kibibytes are formatted", strcmp(cache_human_size(2048), "2.0 KiB") == 0);
+	check_true("mebibytes are formatted", strcmp(cache_human_size(3 * 1024 * 1024), "3.0 MiB") == 0);
+
+	free_ecm(er);
+	free_cache();
+}
+
 static void test_expiry(void)
 {
 	printf("\n[test] max_cache_time expiry\n");
@@ -298,6 +350,7 @@ int main(void)
 	test_insert_and_lookup();
 	test_cw_update_counting();
 	test_capacity_and_lru();
+	test_history_and_helpers();
 	test_expiry();
 
 	printf("\n=================================\n");

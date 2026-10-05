@@ -44,6 +44,9 @@ APIUSERCONFIGLISTBIT          api.xml/userconfiglist_userconfigs.xml
 APIUSEREDIT                   api.xml/useredit.xml
 
 CACHEEXPAGE                   cacheex/cacheex.html                                        CS_CACHEEX
+CACHEENGINEPAGE               cache/cache.html
+CACHEENGINEHOTROW             cache/cache_hotrow.html
+CACHEENGINEHISTORYROW         cache/cache_historyrow.html
 
 CACHEEXTABLEROW               cacheex/cacheex_tablerow.html                               CS_CACHEEX
 CACHEEXAIOTABLEROW            cacheex/cacheex_tablerowaio.html                            CS_CACHEEX_AIO
@@ -184,6 +187,7 @@ LOGOBIT                       include/logobit.html
 LOGOBITIMG                    include/logobit_img.html
 MENU                          include/menu.html
 CACHEEXMENUITEM               include/menu_cacheexmenuitem.html                           CS_CACHEEX
+CACHEENGINEMENUITEM           include/menu_cacheenginemenuitem.html
 MESSAGE                       include/message.html
 MESSAGEBIT                    include/message_bit.html
 NOENTITLEMENTS                include/noentitlements.html

@@ -1,0 +1,75 @@
+##TPLHEADER##
+##TPLMENU##
+##TPLMESSAGE##
+	<DIV ID="subnav">
+		<UL ID="nav">
+			<LI CLASS="configmenu"><A HREF="cacheengine.html?action=reset">Reset Counters</A></LI>
+			<LI CLASS="configmenu"><A HREF="cacheengine.html?action=refresh">Refresh</A></LI>
+			<LI CLASS="configmenu"><A HREF="cacheengine.html?action=snapshot">Save Sample</A></LI>
+		</UL>
+	</DIV>
+
+	<TABLE CLASS="stats">
+		<TR><TH COLSPAN="4">NCam-NG Cache Engine</TH></TR>
+		<TR>
+			<TD>Engine</TD><TD>##CACHEENGINE_VERSION##</TD>
+			<TD>Hit Ratio</TD><TD><B>##CACHE_HITRATIO## %</B></TD>
+		</TR>
+		<TR>
+			<TD>Capacity (max_entries)</TD><TD>##CACHE_LIMIT_ENTRIES##</TD>
+			<TD>Entry lifetime (max_time)</TD><TD>##CACHE_LIMIT_TIME## s</TD>
+		</TR>
+	</TABLE>
+
+	<TABLE CLASS="stats">
+		<TR><TH COLSPAN="4">Cache Counters</TH></TR>
+		<TR>
+			<TD>Lookups</TD><TD>##CACHE_LOOKUPS##</TD>
+			<TD>Hits</TD><TD>##CACHE_HITS##</TD>
+		</TR>
+		<TR>
+			<TD>Misses</TD><TD>##CACHE_MISSES##</TD>
+			<TD>Control Words stored</TD><TD>##CACHE_CW_ENTRIES##</TD>
+		</TR>
+		<TR>
+			<TD>ECM containers (csp)</TD><TD>##CACHE_ENTRIES##</TD>
+			<TD>Estimated memory</TD><TD>##CACHE_MEM_HUMAN##</TD>
+		</TR>
+		<TR>
+			<TD>CW added (new)</TD><TD>##CACHE_CW_NEW##</TD>
+			<TD>CW refreshed (already known)</TD><TD>##CACHE_CW_UPD##</TD>
+		</TR>
+		<TR>
+			<TD>Rejected by CW cycle check</TD><TD>##CACHE_CWC_REJECTED##</TD>
+			<TD>Evicted: TTL / capacity (LRU)</TD><TD>##CACHE_EVICTED_TTL## / ##CACHE_EVICTED_LRU##</TD>
+		</TR>
+	</TABLE>
+
+	<TABLE CLASS="stats">
+		<TR><TH COLSPAN="4">CacheEX Control Word Cache</TH></TR>
+		<TR>
+			<TD>Stored CWs</TD><TD>##CACHE_CWCACHE_ENTRIES##</TD>
+			<TD>Estimated memory</TD><TD>##CACHE_CWCACHE_MEM_HUMAN##</TD>
+		</TR>
+		<TR>
+			<TD>Locally generated (hot)</TD><TD>##CACHE_CWCACHE_LG##</TD>
+			<TD>CacheEX peers online</TD><TD>##CACHE_PEERS_ONLINE## / ##CACHE_PEERS_TOTAL##</TD>
+		</TR>
+	</TABLE>
+
+	<TABLE CLASS="stats">
+		<TR><TH COLSPAN="7">Most Served Control Words</TH></TR>
+		<TR>
+			<TH>CAID</TH><TH>Provider</TH><TH>Service</TH><TH>Servings</TH>
+			<TH>Local card</TH><TH>CacheEX</TH><TH>CSP</TH>
+		</TR>
+##CACHEHOTROWS##
+	</TABLE>
+
+	<TABLE CLASS="stats">
+		<TR><TH COLSPAN="2">Recent Samples</TH></TR>
+		<TR><TH>Time</TH><TH>Hit ratio %</TH></TR>
+##CACHEHISTORYROWS##
+	</TABLE>
+
+##TPLFOOTER##

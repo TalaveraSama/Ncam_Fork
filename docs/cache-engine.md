@@ -56,7 +56,18 @@ max_entries = 200000   ; 0 = ilimitado (comportamiento anterior)
   lote (no `O(k·n)`).
 * Solo se expulsa hasta volver a estar por debajo del límite.
 
-### 2.3 Refactor de liberación
+### 2.3 Histórico de muestras y ayuda de formato
+
+* `add_cache_history_sample()` guarda una muestra de las métricas en un
+  *ring buffer* en memoria (`CACHE_HISTORY_REPORTED`, 10 posiciones), con
+  fecha; `get_cache_history()` las devuelve de la más reciente a la más antigua.
+* `cache_history_sample_if_due(segundos)` registra una muestra solo si la
+  última es más antigua que el intervalo indicado: la página del WebIf llama a
+  `cache_history_sample_if_due(30)`, de modo que el histórico se alimenta solo
+  con navegar por la página (sin acción del usuario).
+* `cache_human_size()` formatea bytes a `B/KiB/MiB/GiB/TiB` para el WebIf.
+
+### 2.4 Refactor de liberación
 
 `cache_free_ecmhash()` agrupa la destrucción de un contenedor (locks de push,
 liberación de CWs, contadores `lg_cache_size`, `cache_cw_total`,
@@ -69,7 +80,31 @@ Además `cleanup_cache()`:
 * cuenta las expulsiones por TTL,
 * registra un resumen en nivel `D_TRACE`.
 
-## 3. API JSON
+## 3. Página del WebIf clásico
+
+```
+GET /cacheengine.html                 página del motor de caché
+GET /cacheengine.html?action=reset    reinicia los contadores
+GET /cacheengine.html?action=snapshot guarda una muestra manual
+```
+
+La página se construye en `send_ncam_cacheengine()` y se enlaza desde el menú
+principal (nuevo índice de menú `MNU_CACHEENGINE`, plantilla
+`webif/include/menu_cacheenginemenuitem.html`, registrada sin condición en
+`pages_index.txt`). Muestra:
+
+* motor, límites (`max_entries`, `max_time`) y *hit ratio*;
+* contadores (consultas, aciertos, fallos, CW almacenadas, memoria estimada,
+  CW nuevas/actualizadas, rechazos por ciclo, expulsiones TTL/LRU);
+* estado de la caché de CW de cacheex y **peers online/total** (lectores en
+  modo cacheex + cuentas cacheex actualmente conectadas);
+* las 20 CW más servidas y las últimas muestras del histórico.
+
+`setActiveMenu()` añade ahora las variables `CACHEEXMENUITEM` (bajo `CS_CACHEEX`)
+y `CACHEENGINEMENUITEM` (siempre), de modo que el menú funciona con y sin
+cacheex compilado.
+
+## 4. API JSON
 
 ```
 GET /ncamapi.json?part=cachestats
@@ -86,7 +121,7 @@ GET /ncamapi.json?part=cachestats&callback=miFuncion  (JSONP, igual que el resto
 * Los valores numéricos se devuelven entrecomillados, igual que el resto del
   API JSON de NCam; el panel los convierte al leerlos.
 
-## 4. Pruebas
+## 5. Pruebas
 
 ```bash
 devtools/run-cache-test.sh
@@ -100,7 +135,7 @@ Verifica: inserciones y aciertos, contabilidad de CW nuevas/actualizadas,
 listado de entradas calientes, límite de capacidad con LRU y expiración por
 `max_time`.
 
-## 5. Compatibilidad
+## 6. Compatibilidad
 
 * Sin cambios en el formato de datos ni en el protocolo cacheex.
 * `max_entries = 0` (valor por defecto) reproduce exactamente el

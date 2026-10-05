@@ -314,6 +314,116 @@ uint32_t cache_get_top_entries(struct s_cache_top_entry *out, uint32_t max_entri
 	return found;
 }
 
+/* NCam-NG: human readable size, used by the webif page */
+const char *cache_human_size(uint64_t bytes)
+{
+	static char buffers[4][32];
+	static uint8_t slot = 0;
+	static const char *units[] = { "B", "KiB", "MiB", "GiB", "TiB" };
+	char *out = buffers[slot++ % 4];
+	double value = (double)bytes;
+	uint8_t unit = 0;
+
+	while(value >= 1024.0 && unit < 4)
+	{
+		value /= 1024.0;
+		unit++;
+	}
+
+	if(unit == 0)
+		{ snprintf(out, 32, "%" PRIu64 " %s", bytes, units[unit]); }
+	else
+		{ snprintf(out, 32, "%.1f %s", value, units[unit]); }
+
+	return out;
+}
+
+/* NCam-NG: in-memory samples of the cache metrics (ring buffer).
+ * They are meant for the webif page, the persistent history is kept by the
+ * management panel.
+ */
+static struct cache_history_sample cache_history[CACHE_HISTORY_REPORTED];
+static struct timeb cache_history_times[CACHE_HISTORY_REPORTED];
+static uint32_t cache_history_count = 0;
+static uint32_t cache_history_next = 0;
+
+void add_cache_history_sample(void)
+{
+	struct s_cache_stats st;
+	uint64_t total_lookups;
+	struct cache_history_sample sample;
+
+	if(!cache_init_done)
+		{ return; }
+
+	cache_get_stats(&st);
+	total_lookups = st.hits + st.misses;
+
+	sample.hits = st.hits;
+	sample.misses = st.misses;
+	sample.hit_ratio = total_lookups ? (uint32_t)((st.hits * 10000ull) / total_lookups) : 0;
+	sample.cw_entries = st.cw_entries;
+	sample.mem_bytes = st.mem_bytes;
+
+	SAFE_RWLOCK_WRLOCK(&cache_lock);
+	cache_history[cache_history_next] = sample;
+	cs_ftime(&cache_history_times[cache_history_next]);
+	cache_history_next = (cache_history_next + 1) % CACHE_HISTORY_REPORTED;
+	if(cache_history_count < CACHE_HISTORY_REPORTED)
+		{ cache_history_count++; }
+	SAFE_RWLOCK_UNLOCK(&cache_lock);
+}
+
+/* NCam-NG: keeps the in-memory history alive without user interaction.
+ * Records a sample only if the last one is older than min_interval_seconds.
+ */
+void cache_history_sample_if_due(uint32_t min_interval_seconds)
+{
+	struct timeb now;
+	int64_t gone_ms;
+
+	if(!cache_init_done)
+		{ return; }
+
+	SAFE_RWLOCK_RDLOCK(&cache_lock);
+	if(cache_history_count)
+	{
+		uint32_t last = (cache_history_next + CACHE_HISTORY_REPORTED - 1) % CACHE_HISTORY_REPORTED;
+		cs_ftime(&now);
+		gone_ms = comp_timeb(&now, &cache_history_times[last]);
+	}
+	else
+		{ gone_ms = -1; }
+	SAFE_RWLOCK_UNLOCK(&cache_lock);
+
+	if(gone_ms < 0 || gone_ms >= (int64_t)min_interval_seconds * 1000)
+		{ add_cache_history_sample(); }
+}
+
+uint32_t get_cache_history(struct cache_history_sample *out, struct timeb *times, uint32_t max_samples)
+{
+	uint32_t i, count = 0;
+
+	if(!out || !times || !max_samples || !cache_init_done)
+		{ return 0; }
+
+	SAFE_RWLOCK_RDLOCK(&cache_lock);
+	if(max_samples > cache_history_count)
+		{ max_samples = cache_history_count; }
+
+	// newest first
+	for(i = 0; i < max_samples; i++)
+	{
+		uint32_t idx = (cache_history_next + CACHE_HISTORY_REPORTED - 1 - i) % CACHE_HISTORY_REPORTED;
+		out[count] = cache_history[idx];
+		times[count] = cache_history_times[idx];
+		count++;
+	}
+	SAFE_RWLOCK_UNLOCK(&cache_lock);
+
+	return count;
+}
+
 /* Releases one ECM container and all its control words.
  * Must be called with cache_lock held (write).
  */

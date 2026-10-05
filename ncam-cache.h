@@ -35,6 +35,28 @@ struct s_cache_top_entry
 
 // how many "hot" cache entries are reported by the webif/api
 #define CACHE_TOP_ENTRIES_REPORTED 20
+// NCam-NG: how many metric samples are kept in memory for the webif
+#define CACHE_HISTORY_REPORTED 10
+
+/* NCam-NG: one in-memory sample of the cache engine metrics */
+struct cache_history_sample
+{
+	uint64_t hits;
+	uint64_t misses;
+	uint32_t hit_ratio;       // 0..10000 (fixed point, 2 decimals)
+	uint64_t cw_entries;
+	uint64_t mem_bytes;
+};
+
+/* NCam-NG: human readable size ("12.3 KiB") */
+const char *cache_human_size(uint64_t bytes);
+/* NCam-NG: records a sample of the current metrics (called by the webif/poller) */
+void add_cache_history_sample(void);
+/* NCam-NG: like add_cache_history_sample() but at most one sample every
+ * min_interval_seconds - used to keep the webif history alive automatically */
+void cache_history_sample_if_due(uint32_t min_interval_seconds);
+/* NCam-NG: newest first, returns the number of samples copied */
+uint32_t get_cache_history(struct cache_history_sample *out, struct timeb *times, uint32_t max_samples);
 
 void cache_get_stats(struct s_cache_stats *st);
 void cache_reset_stats(void);
