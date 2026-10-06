@@ -63,17 +63,15 @@ NCAM_PANEL_NAME="NCam-NG Panel"
 NCAM_PANEL_NOTIFY=1
 EOF
 	chmod 0640 "$ENV_FILE"
+	umask 022
 	log "configuración creada: $ENV_FILE (secreto aleatorio incluido)"
 else
 	log "configuración conservada: $ENV_FILE"
 fi
 
-# 4. permisos (el servicio corre como ncam-panel)
+# 4. permisos de la base de datos (el servicio corre como ncam-panel)
 if [ -z "$ROOT" ]; then
 	chown -R ncam-panel:ncam-panel "$DATA_DIR" 2>/dev/null || true
-	chown -R root:ncam-panel "$PANEL_DIR" 2>/dev/null || true
-	chmod 0640 "$ENV_FILE" 2>/dev/null || true
-	chmod 0750 "$PANEL_DIR" 2>/dev/null || true
 fi
 
 # 5. dependencias de Python (entorno virtual)
@@ -99,6 +97,18 @@ if [ -z "$ROOT" ] && [ -x "$PANEL_DIR/.venv/bin/python" ] && [ ! -f "$DATA_DIR/p
 		log "AVISO: no se pudo crear el super administrador; ejecuta:"
 		log "       sudo -u ncam-panel PYTHONPATH=$PANEL_DIR/backend NCAM_PANEL_DB=$DATA_DIR/panel.db $PANEL_DIR/.venv/bin/python -m app.seed --username admin"
 	fi
+fi
+
+# 6b. permisos definitivos: el grupo ncam-panel tiene que poder leer y ejecutar
+#     el entorno virtual (si no, el servicio no arranca), y el directorio de
+#     datos tiene que ser suyo para poder escribir la base de datos.
+if [ -z "$ROOT" ]; then
+	chown -R root:ncam-panel "$PANEL_DIR" 2>/dev/null || true
+	chmod -R g+rX "$PANEL_DIR" 2>/dev/null || true
+	chmod 0750 "$PANEL_DIR" 2>/dev/null || true
+	chmod 0640 "$ENV_FILE" 2>/dev/null || true
+	chown -R ncam-panel:ncam-panel "$DATA_DIR" 2>/dev/null || true
+	chmod 0750 "$DATA_DIR" 2>/dev/null || true
 fi
 
 # 7. systemd

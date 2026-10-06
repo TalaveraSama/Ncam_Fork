@@ -16,6 +16,10 @@ fi
 if [ "${1:-}" = "purge" ]; then
 	rm -rf "$ROOT/opt/ncam-ng-panel/.venv" "$ROOT/opt/ncam-ng-panel/.env" \
 	       "$ROOT/var/lib/ncam-ng-panel" 2>/dev/null || true
+	# cachés de Python generadas al ejecutar el panel
+	find "$ROOT/opt/ncam-ng-panel" -name '__pycache__' -type d -prune \
+		-exec rm -rf {} + 2>/dev/null || true
+	rmdir "$ROOT/opt/ncam-ng-panel" 2>/dev/null || true
 	echo "ncam-ng-panel: datos del panel eliminados (purge)"
 fi
 exit 0
