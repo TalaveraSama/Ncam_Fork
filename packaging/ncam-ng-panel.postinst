@@ -131,5 +131,10 @@ log "estado:         systemctl status ncam-panel"
 log "logs:           journalctl -u ncam-panel -f"
 log "web:            http://TU_IP:8080   (usuario admin; la contraseña la mostró la semilla)"
 log "guarda esa contraseña: no se vuelve a mostrar"
+log ""
+log "IMPORTANTE: no abras $DATA_DIR/panel.db con un editor de textos (nano, vi...):"
+log "            es una base de datos SQLite y se corrompe. Para consultarla:"
+log "              sqlite3 $DATA_DIR/panel.db 'select username, role, status from users;'"
+log "            La configuración se cambia en el panel web o en el fichero .env."
 
 exit 0

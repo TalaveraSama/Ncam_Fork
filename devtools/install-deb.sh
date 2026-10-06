@@ -121,6 +121,10 @@ AUTO_DIR=0
 if [ -z "$DL_DIR" ]; then
 	DL_DIR="$(mktemp -d /tmp/ncam-ng-deb.XXXXXX)"
 	AUTO_DIR=1
+	# APT descarga sin sandbox si su usuario (_apt) no puede leer la carpeta y
+	# avisa con un "N: Download is performed unsandboxed as root..."; con los
+	# permisos abiertos hace su trabajo normal.
+	chmod 0755 "$DL_DIR"
 fi
 mkdir -p "$DL_DIR"
 

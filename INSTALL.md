@@ -451,6 +451,7 @@ esquema v4 añade las columnas de avisos y de consumo de ECM).
 | Perdí la contraseña del super administrador | `sudo -u ncam-panel PYTHONPATH=/opt/ncam-ng-panel/backend NCAM_PANEL_DB=/var/lib/ncam-ng-panel/panel.db /opt/ncam-ng-panel/.venv/bin/python -m app.seed --username admin --reset-password` (la imprime una vez). |
 | El panel no ve el daemon tras instalar los `.deb` | El panel usa `NCAM_WEBIF_URL` de `/opt/ncam-ng-panel/.env`; por defecto `http://127.0.0.1:8181`. Revisa que el daemon escuche (`ss -ltnp | grep 8181`) y que sus credenciales del WebIf coincidan. |
 | `dpkg: error ... el paquete está en un estado muy malo` | `sudo apt --fix-broken install` y repite la instalación del `.deb`. |
+| Abrí `panel.db` con un editor y ahora el panel da error | `panel.db` es una base de datos **SQLite binaria**: un editor de textos la corrompe. Restaura una copia (`panel/backend/data/`, `/var/lib/ncam-ng-panel/`), o empieza de cero borrándola y volviendo a crear el super admin con `-m app.seed`. Para mirar su contenido usa `sqlite3 /var/lib/ncam-ng-panel/panel.db 'select username, role from users;'` (nunca un editor). |
 
 Para probar el panel **sin daemon**: `python3 panel/tools/mock_ncam_webif.py
 --port 8181 --users demo_linea` y apunta `panel.ncam_webif_url` a ese puerto.

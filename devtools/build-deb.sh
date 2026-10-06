@@ -15,7 +15,7 @@
 # ---------------------------------------------------------------------------
 set -e
 
-VERSION="2.0.1"
+VERSION="2.0.2"
 ARCH="$(dpkg --print-architecture 2>/dev/null || echo amd64)"
 DO_BUILD=1
 WITH_WHEELS=0

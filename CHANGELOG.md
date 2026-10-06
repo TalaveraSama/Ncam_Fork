@@ -1,5 +1,16 @@
 # Changelog
 
+## [2.0.2] - 2026-10-06 — paquetes .deb
+
+* El instalador crea su carpeta temporal con permisos de lectura para el usuario
+  de apt (`_apt`); antes apt avisaba de que la descarga se hacía sin sandbox
+  («N: Download is performed unsandboxed as root…»).
+* El `postinst` del panel avisa de que `panel.db` es una base de datos SQLite y
+  **no se debe abrir con un editor de textos** (nano, vi…), e indica cómo
+  consultarla con `sqlite3`; mismo consejo añadido a los problemas frecuentes de
+  [INSTALL.md](INSTALL.md).
+* `devtools/build-deb.sh` usa 2.0.2 como versión por defecto.
+
 ## [2.0.1] - 2026-10-06 — paquetes .deb
 
 ### Instalación más ligera
