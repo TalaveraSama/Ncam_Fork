@@ -56,9 +56,11 @@ jobs:
 
       - name: Configurar y compilar
         run: |
-          # misma configuración que la guía de instalación (incluye el
-          # SoftCam.Key integrado y el resto de módulos por defecto)
-          ./config.sh
+          # ojo: "./config.sh" sin argumentos imprime la ayuda y termina con
+          # error; hay que pasarle al menos una opción. Con --enable
+          # WITH_SOFTCAM se mantiene la configuración por defecto del proyecto
+          # (módulos, lectores y el SoftCam.Key integrado).
+          ./config.sh --enable WITH_SOFTCAM
           make -j"$(nproc)"
 
       - name: Comprobar el binario
