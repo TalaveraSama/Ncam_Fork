@@ -430,19 +430,20 @@ ifeq "$(CONFIG_WITH_EMU)" "y"
 ifeq "$(CONFIG_WITH_SOFTCAM)" "y"
 UNAME := $(shell uname -s)
 ifneq ($(UNAME),Darwin)
-ifndef ANDROID_NDK
-ifndef ANDROID_STANDALONE_TOOLCHAIN
+# Solo se omite en compilaciones para Android. No se mira la variable de
+# entorno ANDROID_NDK: muchos sistemas la definen aunque se compile para el
+# escritorio (los runners de GitHub, sin ir más lejos) y entonces el SoftCam.Key
+# no se embebía y el enlace fallaba con "_binary_SoftCam_Key_start" no definido.
+ifeq "$(findstring android,$(shell $(CC) -dumpmachine 2>/dev/null))" ""
 TOUCH_SK := $(shell touch SoftCam.Key)
-# El SoftCam.Key se embebe como objeto binario (ld -r -b binary + objcopy).
-# Antes se pasaba "-Wl,--format=binary -Wl,SoftCam.Key" al enlazador, pero esa
-# forma depende de la versión de binutils y falla en algunos sistemas (por
-# ejemplo Ubuntu 22.04): el objeto funciona igual en todas partes.
+# El SoftCam.Key se embebe como objeto binario (ld -r -b binary + objcopy);
+# pasar "-Wl,--format=binary -Wl,SoftCam.Key" al enlazador depende de la
+# versión de binutils y no funciona en todas partes.
 $(shell $(LD) -r -o "SoftCam.Key.o" -z noexecstack --format=binary "SoftCam.Key")
 $(shell $(OBJCOPY) --rename-section .data=.rodata,alloc,load,readonly,data,contents "SoftCam.Key.o")
 EXTRA_LIBS += SoftCam.Key.o
 ifneq ($(uname_S),Cygwin)
 override LDFLAGS += -Wl,-z,noexecstack
-endif
 endif
 endif
 endif

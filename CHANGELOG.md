@@ -101,11 +101,15 @@
 
 ### Compilación
 
-* `Makefile`: el `SoftCam.Key` se embebe ahora con `ld -r -b binary` + `objcopy`
-  (la forma que ya se usaba en aarch64) en lugar de la opción
-  `-Wl,--format=binary -Wl,SoftCam.Key` del enlazador, que depende de la versión
-  de binutils y fallaba al compilar con SoftCam.Key en Ubuntu 22.04. El
-  emulador sigue leyendo además `/etc/ncam/SoftCam.Key` en tiempo de ejecución.
+* `Makefile`: al compilar con SoftCam.Key (configuración por defecto) el enlace
+  podía fallar con «undefined reference to `_binary_SoftCam_Key_start`». Eran dos
+  causas: el método de incrustación (`-Wl,--format=binary -Wl,SoftCam.Key`)
+  depende de la versión de binutils, y el bloque se saltaba por completo si el
+  entorno definía `ANDROID_NDK` —cosa que hacen los runners de GitHub aunque se
+  compile para escritorio—. Ahora se embebe con `ld -r -b binary` + `objcopy` en
+  todas las plataformas y la condición mira el compilador de destino, no las
+  variables de entorno. El emulador sigue leyendo además `/etc/ncam/SoftCam.Key`
+  en tiempo de ejecución.
 
 ### Pruebas
 
