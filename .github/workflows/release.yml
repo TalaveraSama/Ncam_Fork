@@ -60,8 +60,23 @@ jobs:
           # error; hay que pasarle al menos una opción. Con --enable
           # WITH_SOFTCAM se mantiene la configuración por defecto del proyecto
           # (módulos, lectores y el SoftCam.Key integrado).
-          ./config.sh --enable WITH_SOFTCAM
-          make -j"$(nproc)"
+          #
+          # Cada paso se guarda en un log y, si falla, las últimas líneas se
+          # publican como anotación: así el motivo se ve desde la lista de
+          # ejecuciones sin tener que descargar el log completo.
+          run_logged() {
+            "$@" > /tmp/paso.log 2>&1
+            code=$?
+            tail -n 5 /tmp/paso.log
+            if [ $code -ne 0 ]; then
+              detail=$(tail -n 15 /tmp/paso.log | sed 's/%/%25/g' | tr '\n' '~' | sed 's/~/%0A/g')
+              echo "::error title=Fallo: $1::$detail"
+            fi
+            return $code
+          }
+
+          run_logged ./config.sh --enable WITH_SOFTCAM
+          run_logged make -j"$(nproc)"
 
       - name: Comprobar el binario
         run: |
