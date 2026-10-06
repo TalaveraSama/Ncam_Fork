@@ -78,6 +78,9 @@ Administrador**; en la ficha de una cuenta puedes cambiarle el rol. Reglas:
   suspender ni borrar al último (la API responde `400` y la web esconde el botón);
 * cambiar de rol no borra las líneas de la cuenta.
 
+Todo esto, con ejemplos y preguntas frecuentes, en
+[`../docs/administradores.md`](../docs/administradores.md).
+
 ### Variables de entorno principales
 
 | Variable | Por defecto | Descripción |

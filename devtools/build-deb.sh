@@ -15,7 +15,7 @@
 # ---------------------------------------------------------------------------
 set -e
 
-VERSION="2.4.1"
+VERSION="2.4.2"
 ARCH="$(dpkg --print-architecture 2>/dev/null || echo amd64)"
 DO_BUILD=1
 WITH_WHEELS=0
@@ -104,6 +104,7 @@ install_doc README.md    "$pkg/usr/share/doc/ncam-ng/README.md"
 install_doc CHANGELOG.md "$pkg/usr/share/doc/ncam-ng/CHANGELOG.md"
 install_doc INSTALL.md   "$pkg/usr/share/doc/ncam-ng/INSTALL.md"
 install_doc docs/configuracion-optima.md "$pkg/usr/share/doc/ncam-ng/configuracion-optima.md"
+install_doc docs/administradores.md      "$pkg/usr/share/doc/ncam-ng/administradores.md"
 
 install -m 0755 "$packaging/ncam-ng.postinst" "$pkg/DEBIAN/postinst"
 install -m 0755 "$packaging/ncam-ng.prerm"    "$pkg/DEBIAN/prerm"
@@ -131,6 +132,10 @@ for item in backend frontend tools requirements.txt run.sh; do
 done
 find "$pkg/opt/ncam-ng-panel" -name '__pycache__' -type d -prune -exec rm -rf {} + 2>/dev/null || true
 find "$pkg/opt/ncam-ng-panel" -name '*.pyc' -delete 2>/dev/null || true
+# restos de ejecutar las pruebas en el árbol de trabajo (pytest, ruff, mypy…)
+for resto in .pytest_cache .ruff_cache .mypy_cache .coverage node_modules; do
+	rm -rf "$pkg/opt/ncam-ng-panel/$resto" "$pkg/opt/ncam-ng-panel/backend/$resto" 2>/dev/null || true
+done
 rm -rf "$pkg/opt/ncam-ng-panel/backend/data" "$pkg/opt/ncam-ng-panel/.venv" "$pkg/opt/ncam-ng-panel/.env" 2>/dev/null || true
 
 printf '%s\n' "$VERSION" > "$pkg/opt/ncam-ng-panel/VERSION"
@@ -142,6 +147,7 @@ install_doc INSTALL.md      "$pkg/usr/share/doc/ncam-ng-panel/INSTALL.md"
 install_doc CHANGELOG.md    "$pkg/usr/share/doc/ncam-ng-panel/CHANGELOG.md"
 install_doc docs/ajustes.md "$pkg/usr/share/doc/ncam-ng-panel/ajustes.md"
 install_doc docs/ajustes.md "$pkg/opt/ncam-ng-panel/docs/ajustes.md"
+install_doc docs/administradores.md "$pkg/opt/ncam-ng-panel/docs/administradores.md"
 
 if [ "$WITH_WHEELS" = "1" ]; then
 	# Las ruedas con código compilado (httptools, uvloop, pydantic-core…) son

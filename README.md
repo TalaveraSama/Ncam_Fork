@@ -133,7 +133,8 @@ sudo ncam-ng-ctl admin                    # lista las cuentas y sus roles
 ```
 
 Nunca se queda el panel sin administrador activo: no se puede degradar, suspender
-ni borrar al último (la web esconde el botón y el comando lo avisa).
+ni borrar al último (la web esconde el botón y el comando lo avisa). Guía completa:
+[`docs/administradores.md`](docs/administradores.md).
 
 ### Consumo y facturación por ECM
 

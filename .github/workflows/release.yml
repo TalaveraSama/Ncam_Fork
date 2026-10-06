@@ -165,6 +165,7 @@ jobs:
             INSTALL.md
             docs/ajustes.md
             docs/configuracion-optima.md
+            docs/administradores.md
             examples/ncam.conf
             examples/ncam.server
             examples/ncam.user

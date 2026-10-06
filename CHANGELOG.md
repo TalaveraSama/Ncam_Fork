@@ -1,5 +1,15 @@
 # Changelog
 
+## [2.4.2] - 2026-10-06 — guía de administradores
+
+* Nueva guía [`docs/administradores.md`](docs/administradores.md): los tres roles
+  y sus límites, crear administradores desde la web y desde la consola
+  (`ncam-ng-ctl admin add|role|del|passwd` y `app.seed --create/--list/--set-role/--delete`),
+  las reglas que protegen al panel (nunca sin administrador activo, sin
+  auto-cambio de rol, auditoría) y preguntas frecuentes (suspender, recuperar
+  contraseña, revendedor degradado). Se publica también como archivo adjunto en la
+  release.
+
 ## [2.4.1] - 2026-10-06 — varios administradores en NCPanel
 
 * **Más de un super administrador.** Todos tienen el mismo control total y se

@@ -557,7 +557,7 @@ Notas:
   administrador (o este comando) puede crear otros; un revendedor nunca puede
   ascender a nadie. **Nunca se queda el panel sin administrador activo**: no se
   puede degradar, suspender ni borrar al último (el comando lo avisa y no toca
-  nada). Detalles: §2 y §3 de [`panel/README.md`](panel/README.md).
+  nada). Guía paso a paso: [`docs/administradores.md`](docs/administradores.md).
 
 ---
 
