@@ -11,6 +11,9 @@ principales:
    **reseller**: líneas, créditos, usuarios finales, peers de caché, auditoría y
    métricas — integrado con el motor de caché del daemon.
 
+> **Releases:** <https://github.com/TalaveraSama/Ncam_Fork/releases> — paquetes
+> `.deb` del daemon y del panel listos para instalar.
+
 > Copyright: NCam-NG mantiene la licencia **GPL v3** del proyecto original.
 > NCam es Copyright (C) 2012-2018 Javilonas y Copyright (C) 2015-2025 RAED
 > (Fairbird); OSCam es Copyright (C) 2009-2026 de los desarrolladores de OSCam.
