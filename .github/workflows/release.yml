@@ -60,6 +60,9 @@ jobs:
       - name: Comprobaciones de los instaladores
         run: sh devtools/run-install-tests.sh
 
+      - name: Pruebas del frontend (jsdom)
+        run: sh devtools/run-frontend-tests.sh
+
       - name: Configurar y compilar
         run: |
           # ojo: "./config.sh" sin argumentos imprime la ayuda y termina con
@@ -150,8 +153,12 @@ jobs:
             ```
 
             Guía completa: [INSTALL.md](https://github.com/${{ github.repository }}/blob/${{ steps.version.outputs.tag }}/INSTALL.md)
+
+            Configuración del panel (campo por campo): [docs/ajustes.md](https://github.com/${{ github.repository }}/blob/${{ steps.version.outputs.tag }}/docs/ajustes.md)
+            (también adjunta a esta release y en el servidor, en `/opt/ncam-ng-panel/docs/ajustes.md`).
           files: |
             dist/*.deb
             dist/SHA256SUMS
             devtools/install-deb.sh
             INSTALL.md
+            docs/ajustes.md

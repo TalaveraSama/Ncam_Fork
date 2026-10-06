@@ -18,7 +18,8 @@ créditos). Incluye además un rol de **usuario final** de solo lectura.
 ## 1. Instalación
 
 > Guía completa (daemon + panel, systemd y problemas frecuentes) en
-> [`../INSTALL.md`](../INSTALL.md).
+> [`../INSTALL.md`](../INSTALL.md). La pantalla **Ajustes** está explicada campo
+> por campo en [`../docs/ajustes.md`](../docs/ajustes.md).
 
 **Con paquete `.deb`** (recomendado en un servidor): instala el panel en
 `/opt/ncam-ng-panel` con su servicio systemd, crea `/opt/ncam-ng-panel/.env` y la

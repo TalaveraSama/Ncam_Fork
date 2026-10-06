@@ -1305,46 +1305,107 @@ async function viewAudit(el) {
 }
 
 /* ---------------------------------------------------------------- ajustes */
-const SETTING_LABELS = {
-  "notify.enabled": "Avisos de caducidad activados (1/0)",
-  "notify.days_before": "Días de antelación por defecto",
-  "notify.channel.email": "Enviar avisos por email (1/0)",
-  "notify.channel.telegram": "Enviar avisos por Telegram (1/0)",
-  "notify.interval_seconds": "Segundos entre revisiones automáticas",
-  "notify.smtp.host": "Servidor SMTP",
-  "notify.smtp.port": "Puerto SMTP",
-  "notify.smtp.user": "Usuario SMTP",
-  "notify.smtp.password": "Contraseña SMTP",
-  "notify.smtp.from": "Remitente de los avisos",
-  "notify.smtp.starttls": "Usar STARTTLS (1/0)",
-  "notify.telegram.bot_token": "Token del bot de Telegram",
-  "notify.telegram.chat_id": "Chat de Telegram por defecto",
-  "billing.ecm.enabled": "Facturar automáticamente el consumo de ECM (1/0)",
-  "billing.ecm.price": "Créditos por bloque de ECM",
-  "billing.ecm.block": "ECM por bloque facturable",
-  "billing.ecm.interval_seconds": "Segundos entre mediciones de consumo",
-  "billing.ecm.suspend_on_debt": "Suspender líneas con consumo impagado (1/0)",
-};
+// Cada ajuste con su etiqueta y su ayuda, agrupado por para qué sirve.
+const SETTING_GROUPS = [
+  {
+    title: "Panel",
+    hint: "Identidad del panel y datos que se publican a los clientes al exportar sus líneas.",
+    fields: [
+      { key: "panel.name", label: "Nombre del panel", hint: "aparece en la interfaz y en el asunto de los avisos" },
+      { key: "panel.public_host", label: "Host público", hint: "IP o dominio que se escribe en las líneas exportadas (no lo dejes en TU_SERVIDOR)" },
+      { key: "panel.port.cccam", label: "Puerto CCcam", hint: "debe coincidir con [cccam] port de ncam.conf" },
+      { key: "panel.port.newcamd", label: "Puerto Newcamd", hint: "debe coincidir con [newcamd] port de ncam.conf" },
+      { key: "panel.port.camd35", label: "Puerto Camd35", hint: "debe coincidir con [camd35] port de ncam.conf" },
+      { key: "panel.port.cacheex", label: "Puerto Cacheex", hint: "debe coincidir con [cache] port de ncam.conf" },
+    ],
+  },
+  {
+    title: "Daemon NCam (WebIf)",
+    hint: "De aquí salen el estado, las estadísticas del motor de caché y los contadores de ECM. Se aplican al instante.",
+    fields: [
+      { key: "panel.ncam_webif_url", label: "URL del WebIf", hint: "con puerto, p. ej. http://127.0.0.1:8181" },
+      { key: "panel.ncam_webif_user", label: "Usuario del WebIf", hint: "vacío = el del fichero .env" },
+      { key: "panel.ncam_webif_password", label: "Contraseña del WebIf", hint: "se guarda en la base de datos y la API nunca la devuelve" },
+    ],
+  },
+  {
+    title: "Motor de caché",
+    hint: "Valores con los que el panel genera el bloque [cache] de ncam.conf (Caché y peers → Exportar configuración, copiar y reiniciar NCam).",
+    fields: [
+      { key: "ncam.cache.max_time", label: "max_time (segundos)", hint: "tiempo que una entrada se considera válida" },
+      { key: "ncam.cache.max_entries", label: "max_entries (entradas)", hint: "0 = sin límite; con límite se expulsa primero lo menos usado (LRU)" },
+      { key: "ncam.cache.cacheex_enable", label: "Cacheex activado (1/0)", hint: "añade las opciones de caché compartida al bloque generado" },
+      { key: "ncam.cache.panel_poll", label: "Muestreo automático (1/0)", hint: "guarda una muestra de métricas cada 60 s para los gráficos" },
+    ],
+  },
+  {
+    title: "Créditos y facturación",
+    hint: "Reglas de negocio: lo que cuesta crear y renovar líneas, y el cobro por consumo real de ECM.",
+    fields: [
+      { key: "billing.currency", label: "Nombre de la moneda", hint: "etiqueta que se muestra en saldos y movimientos" },
+      { key: "billing.line_cost", label: "Coste por línea (créditos)", hint: "se descuenta al crear una línea" },
+      { key: "billing.renew_cost", label: "Coste por renovación (créditos)", hint: "se descuenta al renovar (+días)" },
+      { key: "billing.ecm.enabled", label: "Facturar consumo de ECM (1/0)", hint: "cobra solo bloques completos, nunca por adelantado" },
+      { key: "billing.ecm.price", label: "Créditos por bloque de ECM", hint: "precio de cada bloque completo" },
+      { key: "billing.ecm.block", label: "ECM por bloque facturable", hint: "ECM respondidas con OK (cwok) que forman un bloque" },
+      { key: "billing.ecm.interval_seconds", label: "Segundos entre mediciones", hint: "mínimo 60; por defecto 900 (15 min)" },
+      { key: "billing.ecm.suspend_on_debt", label: "Suspender líneas con consumo impagado (1/0)", hint: "la línea se suspende hasta que el propietario recargue" },
+    ],
+  },
+  {
+    title: "Avisos de caducidad",
+    hint: "Recordatorios por email y/o Telegram antes de que caduque una línea.",
+    fields: [
+      { key: "notify.enabled", label: "Avisos activados (1/0)", hint: "interruptor maestro: sin esto no se envía nada" },
+      { key: "notify.days_before", label: "Días de antelación por defecto", hint: "cada línea puede tener sus propios días" },
+      { key: "notify.interval_seconds", label: "Segundos entre revisiones", hint: "mínimo 60; 3600 = cada hora" },
+      { key: "notify.channel.email", label: "Enviar avisos por email (1/0)" },
+      { key: "notify.smtp.host", label: "Servidor SMTP", hint: "p. ej. smtp.gmail.com" },
+      { key: "notify.smtp.port", label: "Puerto SMTP", hint: "587 con STARTTLS (el 465 con SSL directo no está soportado)" },
+      { key: "notify.smtp.user", label: "Usuario SMTP" },
+      { key: "notify.smtp.password", label: "Contraseña SMTP", hint: "en Gmail, contraseña de aplicación" },
+      { key: "notify.smtp.from", label: "Remitente de los avisos", hint: "p. ej. NCPanel <tucorreo@gmail.com>" },
+      { key: "notify.smtp.starttls", label: "Usar STARTTLS (1/0)" },
+      { key: "notify.channel.telegram", label: "Enviar avisos por Telegram (1/0)" },
+      { key: "notify.telegram.bot_token", label: "Token del bot de Telegram", hint: "te lo da @BotFather" },
+      { key: "notify.telegram.chat_id", label: "Chat de Telegram por defecto", hint: "tu id numérico (api.telegram.org/bot&lt;token&gt;/getUpdates)" },
+    ],
+  },
+];
+
+const SECRET_SETTINGS = ["panel.ncam_webif_password", "notify.smtp.password", "notify.telegram.bot_token"];
+const GUIDE_URL = "https://github.com/TalaveraSama/Ncam_Fork/blob/main/docs/ajustes.md";
 
 async function viewSettings(el) {
   const data = await api("/settings");
-  const keys = data.editable.filter((key) => key in data.items || key.startsWith("panel."));
+  const settingsField = ({ key, label, hint }) => `
+    <label>${esc(label)}
+      <input name="${esc(key)}" value="${esc(data.items[key] || "")}"${SECRET_SETTINGS.includes(key) ? ' type="password" autocomplete="new-password"' : ""}>
+      <span class="hint">${esc(key)}${hint ? ` · ${esc(hint)}` : ""}</span>
+    </label>`;
+  const groups = SETTING_GROUPS.map((group) => {
+    const fields = group.fields.filter(({ key }) => key in data.items || key.startsWith("panel."));
+    if (!fields.length) return "";
+    return `
+      <div class="card">
+        <h3>${esc(group.title)}</h3>
+        <p class="hint">${esc(group.hint)}</p>
+        <div class="grid two" style="margin-top:10px">${fields.map(settingsField).join("")}</div>
+      </div>`;
+  }).join("");
+
   el.innerHTML = `
-    <div class="card">
-      <h3>Ajustes del panel y del motor de caché</h3>
-      <p class="muted small">Las credenciales del WebIf de NCam se guardan en la base de datos del panel y nunca se devuelven en claro.</p>
-      <form id="settings-form" class="grid two" style="margin-top:12px">
-        ${keys.map((key) => `
-          <label>${esc(SETTING_LABELS[key] || key)}
-            <input name="${esc(key)}" value="${esc(data.items[key] || "")}"
-              ${key === "panel.ncam_webif_password" || key === "notify.smtp.password" || key === "notify.telegram.bot_token" ? 'type="password"' : ""}>
-            <span class="hint">${esc(key)}</span>
-          </label>`).join("")}
-        <div class="actions wide" style="grid-column:1/-1">
+    <form id="settings-form">
+      ${groups}
+      <div class="card">
+        <div class="toolbar">
           <button class="btn primary" type="submit">Guardar ajustes</button>
+          <a class="btn ghost" href="${GUIDE_URL}" target="_blank" rel="noopener">Guía de configuración</a>
         </div>
-      </form>
-    </div>
+        <p class="hint">Los cambios se aplican al guardar. Los campos de contraseña muestran *** si ya hay un valor:
+          solo cambian si escribes otro (vaciarlos los borra).</p>
+      </div>
+    </form>
     <div class="card">
       <h3>Mantenimiento</h3>
       <div class="toolbar">
@@ -1353,14 +1414,16 @@ async function viewSettings(el) {
         <a class="btn ghost" href="${API}/cache/config/download?file=ncam.user" onclick="return ncamDownloadFile(event, 'ncam.user')">Descargar ncam.user</a>
         <a class="btn ghost" href="${API}/cache/config/download?file=ncam.server" onclick="return ncamDownloadFile(event, 'ncam.server')">Descargar ncam.server</a>
       </div>
-      <p class="hint">El histórico se guarda automáticamente cada 60 s si NCam está accesible
-        (NCAM_PANEL_CACHE_POLL=1).</p>
+      <p class="hint">El histórico se guarda automáticamente cada 60 s si NCam está accesible (se puede apagar con el
+        muestreo automático, arriba). Los ficheros ncam.user / ncam.server se copian en /etc/ncam/ y se recargan con
+        <strong>sudo restart-ncam</strong>. La base de datos (panel.db) es SQLite: no la edites con nano.</p>
     </div>`;
 
   $("#settings-form", el).onsubmit = async (event) => {
     event.preventDefault();
     const values = Object.fromEntries(new FormData(event.target).entries());
-    const filtered = Object.fromEntries(Object.entries(values).filter(([, value]) => value !== "***" && value !== ""));
+    // los campos de contraseña sin tocar llegan como ***: no se reenvían
+    const filtered = Object.fromEntries(Object.entries(values).filter(([, value]) => value !== "***"));
     try {
       const result = await api("/settings", { method: "PATCH", body: { values: filtered } });
       toast(`Ajustes aplicados: ${Object.keys(result.applied).length}`);

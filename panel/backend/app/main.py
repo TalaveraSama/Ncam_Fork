@@ -129,8 +129,21 @@ def _bill_once() -> int:
         return conf["interval_seconds"]
 
 
+def _poll_enabled(conn) -> bool:
+    """Muestreo automático del histórico (ajuste ``ncam.cache.panel_poll``).
+
+    El interruptor maestro es ``NCAM_PANEL_CACHE_POLL`` del ``.env`` (si está a 0
+    el planificador ni arranca); este ajuste permite apagarlo o encenderlo desde
+    la pantalla *Ajustes* sin reiniciar el servicio.
+    """
+    value = str(database.get_setting(conn, "ncam.cache.panel_poll", "1")).strip().lower()
+    return value in {"1", "true", "yes", "on", "si", "sí"}
+
+
 def _collect_snapshot() -> None:
     with database.session() as conn:
+        if not _poll_enabled(conn):
+            return
         stats = ncam.fetch_cache_stats(conn)
         if not stats.get("reachable"):
             return

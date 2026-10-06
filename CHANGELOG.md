@@ -1,5 +1,26 @@
 # Changelog
 
+## [2.2.1] - 2026-10-06 — guía de la pantalla Ajustes
+
+* Nuevo documento **[docs/ajustes.md](docs/ajustes.md)**: explica *campo por campo*
+  la pantalla **Ajustes → Configuración global y mantenimiento** (panel, WebIf del
+  daemon, motor de caché, créditos y facturación de ECM, avisos de caducidad y
+  mantenimiento), con qué hace cada valor, valores admitidos, qué se aplica al
+  guardar, cuándo hay que reiniciar, recetas paso a paso, problemas frecuentes y
+  la referencia completa. Se incluye en el paquete del panel
+  (`/opt/ncam-ng-panel/docs/ajustes.md`) y se abre desde el botón *Guía de
+  configuración* de la propia pantalla.
+* La pantalla **Ajustes** ahora agrupa los campos por secciones (Panel, Daemon
+  NCam, Motor de caché, Créditos y facturación, Avisos de caducidad) y cada campo
+  lleva su etiqueta legible y una ayuda con la clave interna. Antes, la mitad de
+  los campos se mostraban con la clave técnica (`panel.port.cccam`, …).
+* El **muestreo automático** (`ncam.cache.panel_poll`) ya se aplica de verdad: a 0
+  el panel deja de guardar muestras del histórico sin reiniciar el servicio (antes
+  el ajuste se guardaba pero no hacía nada).
+* Vaciar un campo ya se guarda como vacío (antes se ignoraba en silencio): sirve
+  para quitar, por ejemplo, un servidor SMTP. Los campos de contraseña siguen
+  mostrándose como `***` y solo cambian si escribes otro valor.
+
 ## [2.2.0] - 2026-10-06 — el panel pasa a llamarse NCPanel
 
 * El panel de gestión se llama ahora **NCPanel**: así aparece en la interfaz

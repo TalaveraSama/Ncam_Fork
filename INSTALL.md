@@ -266,6 +266,12 @@ sudo systemctl status ncam
 
 ## C. NCPanel (desde el código)
 
+> Para configurar cada ajuste del panel (caché, créditos, avisos, mantenimiento),
+> consulta la guía **[docs/ajustes.md](docs/ajustes.md)**. También está en el
+> servidor, en `/opt/ncam-ng-panel/docs/ajustes.md`, y se abre desde el botón
+> *Guía de configuración* de la pantalla Ajustes.
+
+
 ### 1. Dependencias
 
 ```bash
@@ -503,6 +509,7 @@ Notas:
 devtools/run-cache-test.sh                 # motor de caché en C: 37 comprobaciones
 cd panel/backend && python3 -m pytest      # panel: 64 pruebas
 devtools/run-install-tests.sh              # instaladores y comandos: 27 comprobaciones
+devtools/run-frontend-tests.sh             # frontend: pantalla de Ajustes (necesita node)
 ```
 
 Si algo va mal con una release, `ncam-ng-install-deb --list-assets` muestra los

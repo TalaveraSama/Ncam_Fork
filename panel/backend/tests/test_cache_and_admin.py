@@ -124,6 +124,53 @@ def test_settings_whitelist_and_secret_masking(client, admin_token, reseller_tok
     assert result["applied"]["billing.currency"] == "€"
 
 
+def test_panel_poll_setting_controls_automatic_sampling(client, admin_token):
+    """El muestreo automático se puede apagar desde Ajustes (ncam.cache.panel_poll)."""
+    from app import db as database
+    from app import main as panel_main
+    from app import ncam as ncam_module
+
+    def fake_stats(conn):
+        return {
+            "reachable": True,
+            "hit_ratio": 0.5,
+            "entries": 1,
+            "lookups": 10,
+            "hits": 5,
+            "misses": 5,
+            "mem_bytes": 1024,
+        }
+
+    original = ncam_module.fetch_cache_stats
+    ncam_module.fetch_cache_stats = fake_stats
+    try:
+        # con el ajuste a 0, el planificador no guarda nada
+        client.patch(
+            "/api/v1/settings",
+            headers=auth_headers(admin_token),
+            json={"values": {"ncam.cache.panel_poll": "0"}},
+        )
+        panel_main._collect_snapshot()
+        with database.session() as conn:
+            assert database.query_one(
+                conn, "SELECT COUNT(*) AS total FROM usage_snapshots WHERE source = 'panel-poller'"
+            )["total"] == 0
+
+        # con el ajuste a 1, sí guarda
+        client.patch(
+            "/api/v1/settings",
+            headers=auth_headers(admin_token),
+            json={"values": {"ncam.cache.panel_poll": "1"}},
+        )
+        panel_main._collect_snapshot()
+        with database.session() as conn:
+            assert database.query_one(
+                conn, "SELECT COUNT(*) AS total FROM usage_snapshots WHERE source = 'panel-poller'"
+            )["total"] > 0
+    finally:
+        ncam_module.fetch_cache_stats = original
+
+
 def test_reseller_cannot_change_settings(client, reseller_token):
     response = client.patch(
         "/api/v1/settings", headers=auth_headers(reseller_token), json={"values": {"billing.line_cost": "0"}}

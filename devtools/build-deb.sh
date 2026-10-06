@@ -15,7 +15,7 @@
 # ---------------------------------------------------------------------------
 set -e
 
-VERSION="2.2.0"
+VERSION="2.2.1"
 ARCH="$(dpkg --print-architecture 2>/dev/null || echo amd64)"
 DO_BUILD=1
 WITH_WHEELS=0
@@ -119,7 +119,7 @@ say "    dist/ncam-ng_${VERSION}_${ARCH}.deb"
 say "==> empaquetando el panel"
 pkg="$work/ncam-ng-panel"
 mkdir -p "$pkg/DEBIAN" "$pkg/opt/ncam-ng-panel" "$pkg/lib/systemd/system" \
-         "$pkg/usr/bin" "$pkg/usr/share/doc/ncam-ng-panel"
+         "$pkg/usr/bin" "$pkg/usr/share/doc/ncam-ng-panel" "$pkg/opt/ncam-ng-panel/docs"
 
 for item in backend frontend tools requirements.txt run.sh; do
 	[ -e "panel/$item" ] || continue
@@ -136,6 +136,8 @@ install -m 0755 "$packaging/ncam-panel-setup.sh" "$pkg/opt/ncam-ng-panel/setup-i
 install_doc panel/README.md "$pkg/usr/share/doc/ncam-ng-panel/README.md"
 install_doc INSTALL.md      "$pkg/usr/share/doc/ncam-ng-panel/INSTALL.md"
 install_doc CHANGELOG.md    "$pkg/usr/share/doc/ncam-ng-panel/CHANGELOG.md"
+install_doc docs/ajustes.md "$pkg/usr/share/doc/ncam-ng-panel/ajustes.md"
+install_doc docs/ajustes.md "$pkg/opt/ncam-ng-panel/docs/ajustes.md"
 
 if [ "$WITH_WHEELS" = "1" ]; then
 	# Las ruedas con código compilado (httptools, uvloop, pydantic-core…) son

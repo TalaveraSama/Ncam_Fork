@@ -11,6 +11,10 @@ principales:
    **reseller**: líneas, créditos, usuarios finales, peers de caché, auditoría y
    métricas — integrado con el motor de caché del daemon.
 
+> **Documentación:** [INSTALL.md](INSTALL.md) (instalación) ·
+> [docs/ajustes.md](docs/ajustes.md) (guía de configuración, campo por campo) ·
+> [docs/cache-engine.md](docs/cache-engine.md) (motor de caché)
+
 > **Releases:** <https://github.com/TalaveraSama/Ncam_Fork/releases> — paquetes
 > `.deb` del daemon y del panel listos para instalar.
 
@@ -204,10 +208,11 @@ documentación de configuración clásica.
 ├── packaging/                      # control, servicios systemd y scripts de los .deb
 ├── .github/workflows/release.yml   # compila y publica los .deb al etiquetar v*
 ├── Distribution/doc/example/ncam.conf
+├── docs/ajustes.md                 # guía de la pantalla Ajustes, campo por campo
 ├── docs/cache-engine.md            # documentación técnica del motor v2
-└── panel/                          # panel de gestión (super admin / reseller)
+└── panel/                          # NCPanel: panel de gestión (super admin / reseller)
     ├── backend/app/                # API FastAPI + SQLite
-    ├── backend/tests/              # 64 pruebas automatizadas
+    ├── backend/tests/              # 65 pruebas automatizadas
     ├── frontend/                   # SPA en JavaScript puro
     └── tools/mock_ncam_webif.py    # simulador del WebIf para desarrollo
 ```
@@ -216,8 +221,9 @@ documentación de configuración clásica.
 
 ```bash
 devtools/run-cache-test.sh                        # motor de caché (C): 37 comprobaciones
-cd panel/backend && python3 -m pytest             # API del panel (Python): 64 pruebas
+cd panel/backend && python3 -m pytest             # API del panel (Python): 65 pruebas
 devtools/run-install-tests.sh                     # instaladores y comandos: 27 comprobaciones
+devtools/run-frontend-tests.sh                    # frontend (jsdom): pantalla de Ajustes
 ```
 
 ## 6. Aviso legal
