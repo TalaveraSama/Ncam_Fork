@@ -99,6 +99,14 @@
   existente (útil para recuperar el acceso al panel si se perdió la del super
   administrador impresa durante la instalación).
 
+### Compilación
+
+* `Makefile`: el `SoftCam.Key` se embebe ahora con `ld -r -b binary` + `objcopy`
+  (la forma que ya se usaba en aarch64) en lugar de la opción
+  `-Wl,--format=binary -Wl,SoftCam.Key` del enlazador, que depende de la versión
+  de binutils y fallaba al compilar con SoftCam.Key en Ubuntu 22.04. El
+  emulador sigue leyendo además `/etc/ncam/SoftCam.Key` en tiempo de ejecución.
+
 ### Pruebas
 
 * `devtools/cache-engine-test.c` + `devtools/run-cache-test.sh`: compilan el motor

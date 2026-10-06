@@ -97,6 +97,11 @@ Detalles que conviene saber:
   (con `PYTHONPATH=/opt/ncam-ng-panel/backend` y `NCAM_PANEL_DB=/var/lib/ncam-ng-panel/panel.db`).
 * El **WebIf del daemon** trae el usuario `admin`/`ncam`: cámbialo en
   `/etc/ncam/ncam.conf` (`[webif] httppwd`) y `sudo systemctl restart ncam`.
+* El **emulador (SoftCam.Key)** lee las claves de `/etc/ncam/SoftCam.Key`:
+  copia ahí tu fichero y reinicia el servicio. El binario viene con el SoftCam.Key
+  integrado vacío (cada usuario pone el suyo); si prefieres que las claves vayan
+  dentro del binario, coloca el fichero `SoftCam.Key` en la raíz del repositorio
+  antes de compilar.
 * El panel incluye las dependencias de Python en el propio paquete: si tu
   versión de Python coincide, se instalan sin conexión; si no, se bajan de PyPI.
   Se puede repetir a mano con `sudo ncam-ng-panel-setup [--online]`.
