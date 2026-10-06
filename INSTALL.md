@@ -470,6 +470,7 @@ esquema v4 añade las columnas de avisos y de consumo de ECM).
 | `install: target '/usr/local/bin/ncam' is not a directory` | El comodín coincidió con dos ficheros (el binario y el `.debug`). Usa el nombre exacto o `sudo devtools/install-daemon.sh`. |
 | `openssl/aes.h: No such file or directory` | Compilaste con `--enable all` sin SSL: `sudo apt install libssl-dev libdvbcsa-dev` o compila sin `./config.sh`. |
 | El panel dice *WebIf de NCam rechazó las credenciales* | Usuario/contraseña incorrectos: deben coincidir con `httpuser`/`httppwd` del daemon. |
+| El panel dice *sin conexión* y el daemon responde **HTTP 403** | El daemon solo atiende a las IPs de `httpallowed`, que son las de **quien se conecta**; el panel, si va en la misma máquina, consulta el WebIf desde `127.0.0.1`. Compruébalo con `ncam-ng-ctl webif check` y arréglalo con `sudo ncam-ng-ctl webif add 127.0.0.1`. El registro del daemon lo confirma: `journalctl -u ncam \| grep 'unauthorized access'`. |
 | El panel dice *WebIf de NCam no disponible* | Revisa `NCAM_WEBIF_URL`/`panel.ncam_webif_url`, que el daemon esté escuchando (`ss -ltnp | grep 8181`) y que `httpallowed` incluya la IP del panel. |
 | `database is locked` en el log del panel | Dos procesos usando la misma `panel.db`: detén el duplicado o usa otra ruta con `NCAM_PANEL_DB`. |
 | El WebIf no responde en la red local | Ajusta `httpallowed` y `httpport` en `[webif]`, y abre el puerto en el cortafuegos. |

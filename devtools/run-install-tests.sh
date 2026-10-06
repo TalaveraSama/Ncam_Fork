@@ -162,6 +162,47 @@ else
 fi
 check "webif add: crea httpallowed si no existía (tras [webif])" "$r"
 
+echo "== aviso del panel: el WebIf tiene que permitir 127.0.0.1 =="
+# El panel consulta el WebIf desde dentro de la máquina; si 127.0.0.1 no está en
+# httpallowed el daemon responde 403 y el panel se queda «sin conexión».
+mkdir -p "$tmp_webif/panel"
+sed "s|^NCAM_CONF=.*|NCAM_CONF=\"$tmp_webif/panel.conf\"|; s|^PANEL_DIR=.*|PANEL_DIR=\"$tmp_webif/panel\"|" \
+	packaging/ncam-ng-ctl.sh > "$tmp_webif/ctl3"
+chmod +x "$tmp_webif/ctl3"
+printf '[webif]\nhttpallowed = 191.103.121.243\n' > "$tmp_webif/panel.conf"
+
+out="$(sh "$tmp_webif/ctl3" webif 2>&1)"
+if printf '%s' "$out" | grep -q "AVISO: el panel NCPanel"; then r=0; else r=1; fi
+check "webif: avisa si el panel (127.0.0.1) no puede consultar el WebIf" "$r"
+
+sh "$tmp_webif/ctl3" webif check >/dev/null 2>&1 && r=0 || r=$?
+if [ "$r" = "1" ]; then r=0; else r=1; fi
+check "webif check: devuelve 1 cuando falta 127.0.0.1" "$r"
+
+printf '[webif]\nhttpallowed = 127.0.0.1,191.103.121.243\n' > "$tmp_webif/panel.conf"
+out="$(sh "$tmp_webif/ctl3" webif 2>&1)"
+if printf '%s' "$out" | grep -q "AVISO: el panel NCPanel"; then r=1; else r=0; fi
+check "webif: no avisa si 127.0.0.1 está permitida" "$r"
+
+sh "$tmp_webif/ctl3" webif check >/dev/null 2>&1 && r=0 || r=$?
+check "webif check: devuelve 0 cuando 127.0.0.1 está permitida" "$r"
+
+# el postinst del panel usa esa misma comprobación (una sola fuente de verdad)
+sed -n '/# 8\. el panel consulta/,/^fi$/p' packaging/ncam-ng-panel.postinst \
+	| sed "s|/usr/bin/ncam-ng-ctl|$tmp_webif/ctl3|g" > "$tmp_webif/postinst-bloque.sh"
+{ printf 'ROOT=""\nlog() { printf "%%s\\n" "$*"; }\n'; cat "$tmp_webif/postinst-bloque.sh"; } \
+	> "$tmp_webif/postinst-run.sh"
+
+printf '[webif]\nhttpallowed = 191.103.121.243\n' > "$tmp_webif/panel.conf"
+out="$(NCAM_CONF="$tmp_webif/panel.conf" NCAM_CONF_FILE="$tmp_webif/panel.conf" sh "$tmp_webif/postinst-run.sh" 2>&1)"
+if printf '%s' "$out" | grep -q "AVISO"; then r=0; else r=1; fi
+check "postinst del panel: avisa cuando el WebIf no permite 127.0.0.1" "$r"
+
+printf '[webif]\nhttpallowed = 127.0.0.1\n' > "$tmp_webif/panel.conf"
+out="$(NCAM_CONF="$tmp_webif/panel.conf" NCAM_CONF_FILE="$tmp_webif/panel.conf" sh "$tmp_webif/postinst-run.sh" 2>&1)"
+if printf '%s' "$out" | grep -q "AVISO"; then r=1; else r=0; fi
+check "postinst del panel: no avisa si 127.0.0.1 está permitida" "$r"
+
 rm -rf "$tmp_webif"
 
 echo "== cuentas del panel (ncam-ng-ctl admin) =="
@@ -201,6 +242,9 @@ check "admin: una opción desconocida avisa" "$r"
 
 sh packaging/ncam-ng-ctl.sh --help 2>/dev/null | grep -q "ncam-ng-ctl admin add"
 check "ncam-ng-ctl --help documenta admin add" $?
+
+sh packaging/ncam-ng-ctl.sh --help 2>/dev/null | grep -q "ncam-ng-ctl webif check"
+check "ncam-ng-ctl --help documenta webif check" $?
 
 # el comando de siempre para cambiar una contraseña sigue funcionando
 out="$(sh packaging/ncam-ng-ctl.sh --dry-run passwd admin 2>&1)"

@@ -344,6 +344,12 @@ max_entries = 0
 Si el daemon no está accesible, el panel **no falla**: muestra el error y
 ofrece el último histórico guardado.
 
+> **`HTTP 403 Access denied`** en *Caché y peers* significa que el daemon no permite
+> la dirección desde la que se conecta el panel: `httpallowed` son las IPs de **quien
+> se conecta** y, si el panel va en la misma máquina que el daemon, esa es
+> `127.0.0.1` (por eso viene en el ejemplo). Compruébalo con `ncam-ng-ctl webif check`
+> y arréglalo con `sudo ncam-ng-ctl webif add 127.0.0.1`; después, `restart-ncam`.
+
 ## 5. Pruebas
 
 ```bash

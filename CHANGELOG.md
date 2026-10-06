@@ -1,5 +1,30 @@
 # Changelog
 
+## [2.4.4] - 2026-10-06 — el panel ya no se queda «sin conexión» sin decir por qué
+
+* **Diagnóstico claro del `HTTP 403` del WebIf.** Cuando el daemon rechaza al panel
+  (la dirección desde la que se conecta no está en `httpallowed`), el panel ya no
+  dice «sin conexión» a secas: indica qué dirección hay que permitir y la orden
+  exacta para hacerlo. El caso más habitual es tener el panel y el daemon en la
+  misma máquina: NCPanel consulta el WebIf desde `127.0.0.1`, y esa IP tiene que
+  estar en `httpallowed` (el daemon solo mira la IP de **quien se conecta**, no la
+  del servidor).
+* **`ncam-ng-ctl webif check`**: comprobación corta (pensada para scripts) de si el
+  panel puede consultar el WebIf; devuelve `1` y explica el arreglo cuando falta
+  `127.0.0.1`. Además, `ncam-ng-ctl status` muestra el `403` con su causa, y
+  `ncam-ng-ctl webif` avisa cuando el panel está instalado y la lista no incluye
+  `127.0.0.1`.
+* **El paquete del panel avisa al instalarse o actualizarse**: si `/etc/ncam/ncam.conf`
+  existe y `httpallowed` no permite `127.0.0.1`, el instalador termina con un aviso
+  y la orden para arreglarlo (no modifica el fichero del daemon por su cuenta).
+* `ncam-ng-ctl` acepta `NCAM_CONF` en el entorno, para poder comprobar otro fichero
+  de configuración sin tocar el del sistema.
+* Documentación: nota en §12 de [`docs/configuracion-optima.md`](docs/configuracion-optima.md),
+  aviso en [`docs/panel-sin-exponer-ip.md`](docs/panel-sin-exponer-ip.md) y en
+  [`panel/README.md`](panel/README.md), y fila nueva en *Problemas frecuentes* de
+  [`INSTALL.md`](INSTALL.md).
+* Pruebas: 2 nuevas del panel (97 en total) y 7 nuevas del instalador (55 en total).
+
 ## [2.4.3] - 2026-10-06 — publicar el panel sin exponer tu IP (Cloudflare Tunnel)
 
 * **Guía nueva** [`docs/panel-sin-exponer-ip.md`](docs/panel-sin-exponer-ip.md):

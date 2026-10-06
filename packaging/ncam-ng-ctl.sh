@@ -23,6 +23,8 @@
 #   ncam-ng-ctl webif add IP|RANGO|DOMINIO [...]    permite ese acceso
 #   ncam-ng-ctl webif del IP|RANGO|DOMINIO [...]    quita ese acceso
 #   ncam-ng-ctl webif add any           permite cualquier IP (¡con cuidado!)
+#   ncam-ng-ctl webif check             ¿puede el panel (127.0.0.1) consultar el
+#                                       WebIf? (1 = no: mostrará «sin conexión»)
 #
 # Atajos (instalados como enlaces a este mismo script):
 #
@@ -37,7 +39,7 @@ set -e
 
 NCAM_SERVICE="ncam"
 PANEL_SERVICE="ncam-panel"
-NCAM_CONF="/etc/ncam/ncam.conf"
+NCAM_CONF="${NCAM_CONF:-/etc/ncam/ncam.conf}"   # se puede apuntar a otro fichero (pruebas, configs propias)
 PANEL_DIR="/opt/ncam-ng-panel"
 PANEL_ENV="$PANEL_DIR/.env"
 PANEL_DB_DEFAULT="/var/lib/ncam-ng-panel/panel.db"
@@ -106,7 +108,7 @@ while [ $# -gt 0 ]; do
 					*)      ADMIN_OP="$1" ;;
 				esac
 			elif [ "$ACTION" = "webif" ] && [ -z "$WEBIF_OP" ] \
-				&& { [ "$1" = "add" ] || [ "$1" = "del" ] || [ "$1" = "remove" ] || [ "$1" = "list" ]; }; then
+				&& { [ "$1" = "add" ] || [ "$1" = "del" ] || [ "$1" = "remove" ] || [ "$1" = "list" ] || [ "$1" = "check" ]; }; then
 				case "$1" in
 					remove) WEBIF_OP="del" ;;
 					*)      WEBIF_OP="$1" ;;
@@ -143,7 +145,7 @@ while [ $# -gt 0 ]; do
 			elif [ "$ACTION" = "passwd" ] && [ -z "$USERNAME" ]; then
 				USERNAME="$1"
 			elif [ "$ACTION" = "webif" ] && [ -z "$WEBIF_OP" ] \
-				&& { [ "$1" = "add" ] || [ "$1" = "del" ] || [ "$1" = "remove" ] || [ "$1" = "list" ]; }; then
+				&& { [ "$1" = "add" ] || [ "$1" = "del" ] || [ "$1" = "remove" ] || [ "$1" = "list" ] || [ "$1" = "check" ]; }; then
 				case "$1" in
 					remove) WEBIF_OP="del" ;;
 					*)      WEBIF_OP="$1" ;;
@@ -168,7 +170,7 @@ fi
 NEED_ROOT=1
 case "$ACTION" in
 	status|version) NEED_ROOT=0 ;;
-	webif) [ -z "$WEBIF_OP" ] || [ "$WEBIF_OP" = "list" ] && NEED_ROOT=0 ;;
+	webif) [ -z "$WEBIF_OP" ] || [ "$WEBIF_OP" = "list" ] || [ "$WEBIF_OP" = "check" ] && NEED_ROOT=0 ;;
 esac
 [ "$DRY" = "1" ] && NEED_ROOT=0
 
@@ -337,6 +339,49 @@ split_list() {   # split_list <a,b,c>  -> una entrada por línea
 	printf '%s' "$1" | tr ',' '\n' | sed 's/^[[:space:]]*//; s/[[:space:]]*$//' | grep -v '^$' || true
 }
 
+ip_to_number() {   # ip_to_number <IPv4> -> número (para comparar rangos)
+	is_ipv4 "$1" || return 1
+	printf '%s\n' "$1" | awk -F. '{ printf "%.0f\n", (($1 * 256 + $2) * 256 + $3) * 256 + $4 }'
+}
+
+list_allows_ip() {   # list_allows_ip <lista> <ip>  -> 0 si esa IP queda permitida
+	list="$1"; ip="$2"
+	while IFS= read -r entry; do
+		[ -n "$entry" ] || continue
+		case "$entry" in
+			any|0.0.0.0-255.255.255.255) return 0 ;;
+		esac
+		if [ "$(printf '%s' "$entry" | tr 'A-Z' 'a-z')" = "$ip" ]; then
+			return 0
+		fi
+		if is_iprange "$entry"; then
+			n="$(ip_to_number "$ip" || true)"
+			lo="$(ip_to_number "${entry%%-*}" || true)"
+			hi="$(ip_to_number "${entry#*-}" || true)"
+			if [ -n "$n" ] && [ -n "$lo" ] && [ -n "$hi" ] \
+				&& [ "$n" -ge "$lo" ] && [ "$n" -le "$hi" ]; then
+				return 0
+			fi
+		fi
+	done <<EOF
+$(split_list "$list")
+EOF
+	return 1
+}
+
+# El panel NCPanel habla con el WebIf desde dentro de la máquina (127.0.0.1). Si
+# esa IP no está en httpallowed, el panel se queda en «sin conexión» con HTTP 403
+# (el daemon solo mira la IP de quien se conecta, no la del servidor).
+warn_panel_loopback() {
+	[ -d "$PANEL_DIR" ] || return 0
+	list_allows_ip "$(conf_value httpallowed)" "127.0.0.1" && return 0
+	say ""
+	say "  AVISO: el panel NCPanel está instalado y consulta el WebIf desde 127.0.0.1,"
+	say "         que NO está en la lista: el panel mostrará «sin conexión» (HTTP 403)."
+	say "         Arréglalo con:  ncam-ng-ctl webif add 127.0.0.1"
+	return 0
+}
+
 add_or_remove() {   # add_or_remove <lista> <entrada> <add|del>
 	list="$1"; item="$2"; op="$3"
 	result=""; found=0
@@ -453,7 +498,22 @@ do_webif_show() {
 	say ""
 	say "  La IP permitida es la de QUIEN se conecta, tal como la ve este servidor:"
 	say "  si navegas desde tu PC por la VPN, hay que permitir la IP de tu PC."
+	warn_panel_loopback
 	return 0
+}
+
+do_webif_check() {
+	# Salida corta, pensada para scripts y para el postinst del panel: dice si
+	# 127.0.0.1 (la dirección desde la que consulta NCPanel, que va en la misma
+	# máquina que el daemon) está permitida. Devuelve 1 cuando NO lo está.
+	[ -r "$NCAM_CONF" ] || die "no encuentro $NCAM_CONF (¿está instalado el paquete ncam-ng?)"
+	if list_allows_ip "$(conf_value httpallowed)" "127.0.0.1"; then
+		say "  WebIf: 127.0.0.1 permitida (el panel puede consultarlo)"
+		return 0
+	fi
+	say "  WebIf: 127.0.0.1 NO está en httpallowed: el panel mostrará «sin conexión» (HTTP 403)"
+	say "         arréglalo con:  ncam-ng-ctl webif add 127.0.0.1   (y restart-ncam)"
+	return 1
 }
 
 do_webif_edit() {
@@ -511,6 +571,7 @@ do_webif_edit() {
 	[ "$DRY" = "1" ] && return 0
 	say ""
 	say "  acceso permitido: $allowed"
+	warn_panel_loopback
 	if [ -n "$dyndns" ]; then
 		say "  dominios:         $dyndns"
 	fi
@@ -645,6 +706,9 @@ do_status() {
 		case "$code" in
 			200) say "  WebIf:  ok (http://127.0.0.1:$wp/cacheengine.html)" ;;
 			401) say "  WebIf:  pide usuario y contraseña (lo normal; usuario admin)" ;;
+			403) say "  WebIf:  DENIEGA el acceso desde el propio servidor (HTTP 403):"
+			     say "          falta 127.0.0.1 en httpallowed; arréglalo con:"
+			     say "          ncam-ng-ctl webif add 127.0.0.1" ;;
 			*)   say "  WebIf:  sin respuesta (HTTP ${code:-000})" ;;
 		esac
 	fi
@@ -666,6 +730,7 @@ do_status() {
 		[ -n "$dyndns" ] && say "  dominios (httpdyndns):    $dyndns"
 		say "                            (ncam-ng-ctl webif para verlo o añadir tu IP)"
 	fi
+	warn_panel_loopback
 	say "  registros:                ncam-ng-ctl logs [ncam|panel] -f"
 	return 0
 }
@@ -863,6 +928,7 @@ case "$ACTION" in
 	version) do_version ;;
 	webif)
 		case "$WEBIF_OP" in
+			check) do_webif_check ;;
 			add)  do_webif_edit add $WEBIF_ITEMS ;;
 			del)  do_webif_edit del $WEBIF_ITEMS ;;
 			*)    do_webif_show ;;

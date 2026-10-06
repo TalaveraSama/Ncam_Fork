@@ -353,6 +353,9 @@ async function viewDashboard(el) {
       <p class="muted small">${esc(cache.error || "No se pudo consultar el WebIf de NCam.")}</p>
       <p class="hint">Configure la URL del WebIf en <strong>Ajustes</strong> (por defecto http://127.0.0.1:8181)
         y verifique que NCam esté en ejecución con <code>http_port</code> habilitado.</p>
+      <p class="hint">Si el error es <strong>403</strong>, el daemon no permite la IP desde la que se
+        conecta el panel: añádala con <code>sudo ncam-ng-ctl webif add 127.0.0.1</code> y aplique con
+        <code>sudo restart-ncam</code> (si el panel va en otra máquina, esa IP).</p>
     </div>`;
 
   const daemonCard = overview.ncam?.reachable ? `

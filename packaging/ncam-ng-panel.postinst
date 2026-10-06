@@ -139,12 +139,29 @@ if [ -z "$ROOT" ] && command -v systemctl >/dev/null 2>&1 && [ -d /run/systemd/s
 	fi
 fi
 
+# 8. el panel consulta el WebIf del daemon desde 127.0.0.1 (los dos van en esta
+#    máquina): si esa IP no está en httpallowed el daemon responde 403 y el panel
+#    se queda «sin conexión». La comprobación la hace ncam-ng-ctl (una sola
+#    fuente de verdad) y solo se avisa: la lista es del paquete del daemon.
+CTL=/usr/bin/ncam-ng-ctl
+[ -x "$CTL" ] || CTL="$(command -v ncam-ng-ctl 2>/dev/null || true)"
+NCAM_CONF_FILE="${NCAM_CONF_FILE:-/etc/ncam/ncam.conf}"
+if [ -z "$ROOT" ] && [ -n "$CTL" ] && [ -r "$NCAM_CONF_FILE" ]; then
+	if ! "$CTL" webif check >/dev/null 2>&1; then
+		log "AVISO: el panel consulta el WebIf del daemon desde 127.0.0.1 y esa IP no está"
+		log "       en httpallowed; el panel mostrará «sin conexión» (HTTP 403)."
+		"$CTL" webif check 2>/dev/null | sed 's/^[[:space:]]*/       /' || true
+		log "       detalle:  ncam-ng-ctl webif"
+	fi
+fi
+
 log "panel instalado en $PANEL_DIR"
 log "configuración:  $ENV_FILE"
 log "base de datos:  $DATA_DIR/panel.db"
 log "estado:         systemctl status ncam-panel"
 log "logs:           journalctl -u ncam-panel -f"
 log "web:            http://TU_IP:8080   (usuario admin; la contraseña la mostró la semilla)"
+log "sin abrir puertos:  ver /usr/share/doc/ncam-ng-panel/panel-sin-exponer-ip.md (Cloudflare Tunnel)"
 log "guarda esa contraseña: no se vuelve a mostrar"
 log "otro administrador:  ncam-ng-ctl admin add USUARIO   (o desde la web: Nueva cuenta -> Administrador)"
 log "ver las cuentas:     ncam-ng-ctl admin"

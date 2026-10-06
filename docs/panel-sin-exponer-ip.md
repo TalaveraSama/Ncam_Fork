@@ -156,6 +156,11 @@ sudo ufw reload
 > panel del proveedor, cierra ahí también 8080/8181. Y **no** publiques esos puertos
 > en el router si el servidor está en tu casa.
 
+> **No quites `127.0.0.1` de `httpallowed`** en `[webif]` de `ncam.conf`: NCPanel
+> consulta el WebIf desde dentro de la máquina y, si esa IP no está permitida, el
+> daemon responde `403 Access denied` y el panel se queda *sin conexión*. Se
+> comprueba en un paso: `ncam-ng-ctl webif check`.
+
 En Cloudflare, activa **SSL/TLS → Edge Certificates → Always Use HTTPS**.
 
 ---

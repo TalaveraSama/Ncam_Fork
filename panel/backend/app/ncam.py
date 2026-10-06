@@ -20,7 +20,7 @@ import sqlite3
 import time
 from typing import Any, Optional
 from urllib.error import HTTPError, URLError
-from urllib.parse import quote
+from urllib.parse import quote, urlsplit
 from urllib.request import Request, urlopen
 
 from .config import settings
@@ -52,6 +52,20 @@ def _webif_url(conn: Optional[sqlite3.Connection] = None) -> str:
     if conn is not None:
         url = database.get_setting(conn, "panel.ncam_webif_url", url) or url
     return url.rstrip("/")
+
+
+def _origen_del_panel(base_url: str) -> str:
+    """Dirección desde la que el panel se conecta al WebIf.
+
+    Sirve para el aviso de HTTP 403: el daemon solo atiende a las IPs (o dominios)
+    de ``httpallowed``/``httpdyndns`` y esas IPs son las de *quien se conecta*, así
+    que la que hay que permitir es la del panel (``127.0.0.1`` si va en la misma
+    máquina que el daemon).
+    """
+    host = urlsplit(base_url).hostname or ""
+    if not host or host.lower() in {"localhost", "127.0.0.1", "::1"}:
+        return "127.0.0.1"
+    return host
 
 
 def _parse_digest_challenge(header: str) -> dict[str, str]:
@@ -142,6 +156,15 @@ def _get_json(path: str, params: dict[str, str], timeout: Optional[float] = None
         if exc.code == 401:
             raise NcamUnavailable(
                 "NCam WebIf rechazó las credenciales (revise usuario/contraseña del WebIf)"
+            ) from exc
+        if exc.code == 403:
+            # el único 403 del WebIf es la comprobación de origen: la IP de quien
+            # se conecta no está en httpallowed ni la resuelve httpdyndns
+            origen = _origen_del_panel(base)
+            raise NcamUnavailable(
+                "El WebIf de NCam denegó el acceso (HTTP 403): la dirección desde la que se "
+                f"conecta el panel ({origen}) no está en httpallowed/httpdyndns del daemon. "
+                f"Añádela con:  sudo ncam-ng-ctl webif add {origen}"
             ) from exc
         raise NcamUnavailable(f"NCam WebIf respondió HTTP {exc.code}") from exc
     except (URLError, socket.timeout, OSError) as exc:

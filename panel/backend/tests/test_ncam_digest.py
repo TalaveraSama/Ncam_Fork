@@ -141,3 +141,48 @@ def test_challenge_parsing():
     assert 'uri="/ncamapi.json?part=status"' in header
     assert "qop=auth" in header
     assert 'response="' in header
+
+
+class _ForbiddenHandler(BaseHTTPRequestHandler):
+    """Servidor que responde 403 como el WebIf cuando la IP no está permitida."""
+
+    def log_message(self, *args):  # silencio
+        pass
+
+    def do_GET(self):  # noqa: N802
+        self.send_response(403)
+        self.send_header("Content-Length", "0")
+        self.end_headers()
+
+
+@pytest.fixture()
+def forbidden_server():
+    server = ThreadingHTTPServer(("127.0.0.1", 0), _ForbiddenHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        yield f"http://127.0.0.1:{server.server_port}"
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def test_forbidden_says_which_ip_to_allow(forbidden_server):
+    """El 403 del WebIf es siempre httpallowed: el error tiene que decir qué hacer."""
+    with pytest.raises(ncam.NcamUnavailable) as excinfo:
+        ncam._get_json("/ncamapi.json", {"part": "status"}, base_url=forbidden_server)
+    message = str(excinfo.value)
+    assert "403" in message
+    assert "httpallowed" in message
+    # la orden exacta que lo arregla, con la IP del panel (misma máquina)
+    assert "sudo ncam-ng-ctl webif add 127.0.0.1" in message
+
+
+def test_origen_del_panel():
+    """La dirección que se le propone permitir es la del panel, no la del servidor."""
+    assert ncam._origen_del_panel("http://127.0.0.1:8181") == "127.0.0.1"
+    assert ncam._origen_del_panel("http://localhost:8181") == "127.0.0.1"
+    assert ncam._origen_del_panel("http://[::1]:8181") == "127.0.0.1"
+    assert ncam._origen_del_panel("https://127.0.0.1:8181/") == "127.0.0.1"
+    assert ncam._origen_del_panel("http://192.6.154.19:8181") == "192.6.154.19"
+    assert ncam._origen_del_panel("http://webif.micasa.org") == "webif.micasa.org"

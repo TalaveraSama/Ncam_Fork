@@ -539,6 +539,16 @@ desde tu casa o tu VPN con IP pública `191.103.121.243`:
 | `127.0.0.1` | El propio servidor | Conviene dejarla (escritorio remoto, pruebas, NCPanel si va en la misma máquina) |
 | `192.168.0.0-192.168.255.255`, `10.0.0.0-10.255.255.255`, `172.16.0.0-172.31.255.255` | Redes locales (vienen de serie) | Sí, si en tu red hay equipos, y también si tu VPN reparte IPs internas (`10.x`, `172.16-31.x`) |
 
+> **Si tienes NCPanel en este mismo servidor, deja siempre `127.0.0.1` en la
+> lista.** El panel consulta el WebIf desde dentro de la máquina y, si esa IP no
+> está permitida, el daemon responde `403` y la pantalla principal del panel muestra
+> *sin conexión*. Se comprueba y se arregla en dos pasos:
+>
+> ```bash
+> ncam-ng-ctl webif check          # ¿puede el panel consultar el WebIf? (1 = no)
+> sudo ncam-ng-ctl webif add 127.0.0.1
+> ```
+
 Ejemplo mínimo para tu caso (una línea, separada por comas, **sin espacios**):
 
 ```ini
