@@ -174,5 +174,47 @@ modalForm.dispatchEvent(new window.Event("submit", { bubbles: true, cancelable: 
 await new Promise((resolve) => setTimeout(resolve, 100));
 check("el alta envía caid_allow", sentLine !== null && sentLine.caid_allow === "1801,1861");
 
+// --- alta de cuentas: se pueden crear más administradores -------------------
+await window.eval(`(async () => {
+  state.user = { username: "admin", role: "super_admin", credits: 0 };
+  await openAccountForm(async () => {}, null);
+})()`);
+const accountForm = doc.querySelector("#modal-root").innerHTML;
+check("el alta de cuentas ofrece el rol administrador", accountForm.includes('value="super_admin"'));
+check("el alta explica qué puede un administrador", accountForm.includes("control total del panel"));
+
+let sentAccount = null;
+window.fetch = async (url, options = {}) => {
+  sentAccount = JSON.parse(options.body);
+  return {
+    ok: true, status: 201, headers: { get: () => "application/json" },
+    json: async () => ({ id: 9, username: "ana" }), text: async () => "{}",
+  };
+};
+const accountModalForm = doc.querySelector("#modal-root form");
+accountModalForm.querySelector('input[name="username"]').value = "ana";
+accountModalForm.querySelector('input[name="password"]').value = "ClaveSegura!23";
+accountModalForm.querySelector('select[name="role"]').value = "super_admin";
+accountModalForm.dispatchEvent(new window.Event("submit", { bubbles: true, cancelable: true }));
+await new Promise((resolve) => setTimeout(resolve, 100));
+check("el alta de un administrador envía role=super_admin",
+  sentAccount !== null && sentAccount.role === "super_admin" && sentAccount.username === "ana");
+
+// en edición: el rol se puede cambiar, salvo el de uno mismo (deshabilitado)
+await window.eval(`(async () => {
+  state.user = { id: 1, username: "admin", role: "super_admin", credits: 0 };
+  await openAccountForm(async () => {}, { id: 5, username: "luis", role: "reseller", credits: 0, max_lines: 0 });
+})()`);
+const editForm = doc.querySelector("#modal-root").innerHTML;
+check("la edición permite cambiar el rol", editForm.includes('name="role"') && editForm.includes("Revendedor"));
+
+await window.eval(`(async () => {
+  state.user = { id: 1, username: "admin", role: "super_admin", credits: 0 };
+  await openAccountForm(async () => {}, { id: 1, username: "admin", role: "super_admin", credits: 0, max_lines: 0 });
+})()`);
+const selfForm = doc.querySelector("#modal-root").innerHTML;
+check("no se puede cambiar el rol propio",
+  /name="role"[^>]*disabled/.test(selfForm) && selfForm.includes("No puede cambiarse el rol a sí mismo"));
+
 console.log(failures.length ? `\n${failures.length} fallo(s)` : "\nfrontend OK");
 process.exit(failures.length ? 1 : 0);

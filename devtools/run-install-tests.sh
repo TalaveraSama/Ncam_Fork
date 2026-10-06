@@ -164,6 +164,49 @@ check "webif add: crea httpallowed si no existía (tras [webif])" "$r"
 
 rm -rf "$tmp_webif"
 
+echo "== cuentas del panel (ncam-ng-ctl admin) =="
+out="$(sh packaging/ncam-ng-ctl.sh --dry-run admin 2>&1)"
+if printf '%s' "$out" | grep -q "app.seed --list"; then r=0; else r=1; fi
+check "admin: lista las cuentas del panel" "$r"
+
+out="$(sh packaging/ncam-ng-ctl.sh --dry-run admin add ana 2>&1)"
+if printf '%s' "$out" | grep -q -- "--create --username ana --role super_admin"; then r=0; else r=1; fi
+check "admin add: crea un super administrador por defecto" "$r"
+
+out="$(sh packaging/ncam-ng-ctl.sh --dry-run admin add luis reseller 2>&1)"
+if printf '%s' "$out" | grep -q -- "--role reseller"; then r=0; else r=1; fi
+check "admin add: admite el rol revendedor" "$r"
+
+out="$(sh packaging/ncam-ng-ctl.sh --dry-run admin add pepe user Clave.Pepe1 pepe@ejemplo.com 2>&1)"
+if printf '%s' "$out" | grep -q -- "--role user" && printf '%s' "$out" | grep -q -- "--password Clave.Pepe1" \
+	&& printf '%s' "$out" | grep -q -- "--email pepe@ejemplo.com"; then r=0; else r=1; fi
+check "admin add: acepta rol, contraseña y email" "$r"
+
+out="$(sh packaging/ncam-ng-ctl.sh --dry-run admin role luis reseller 2>&1)"
+if printf '%s' "$out" | grep -q -- "--set-role luis reseller"; then r=0; else r=1; fi
+check "admin role: cambia el rol de una cuenta" "$r"
+
+out="$(sh packaging/ncam-ng-ctl.sh --dry-run admin del viejo 2>&1)"
+if printf '%s' "$out" | grep -q -- "--delete viejo"; then r=0; else r=1; fi
+check "admin del: elimina una cuenta" "$r"
+
+# "admin" también es un nombre de usuario válido
+out="$(sh packaging/ncam-ng-ctl.sh --dry-run admin passwd admin 2>&1)"
+if printf '%s' "$out" | grep -q -- "--username admin --reset-password"; then r=0; else r=1; fi
+check "admin passwd: admite nombres de usuario que son palabras clave" "$r"
+
+sh packaging/ncam-ng-ctl.sh --dry-run admin borrar cosas >/dev/null 2>&1 && r=0 || r=$?
+if [ "$r" != "0" ]; then r=0; else r=1; fi
+check "admin: una opción desconocida avisa" "$r"
+
+sh packaging/ncam-ng-ctl.sh --help 2>/dev/null | grep -q "ncam-ng-ctl admin add"
+check "ncam-ng-ctl --help documenta admin add" $?
+
+# el comando de siempre para cambiar una contraseña sigue funcionando
+out="$(sh packaging/ncam-ng-ctl.sh --dry-run passwd admin 2>&1)"
+if printf '%s' "$out" | grep -q -- "--username admin --reset-password"; then r=0; else r=1; fi
+check "passwd: sigue funcionando tras el refactor" "$r"
+
 echo "== opciones del instalador =="
 sh devtools/install-deb.sh --help 2>/dev/null | grep -q -- '--list-assets'
 check "el instalador documenta --list-assets" $?

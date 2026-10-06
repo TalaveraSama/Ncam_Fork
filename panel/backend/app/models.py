@@ -68,6 +68,7 @@ class AccountCreate(BaseModel):
 class AccountUpdate(BaseModel):
     password: Optional[str] = Field(default=None, min_length=8, max_length=256)
     email: Optional[str] = Field(default=None, max_length=128)
+    role: Optional[Role] = None
     credits: Optional[int] = Field(default=None, ge=0, le=10_000_000)
     max_lines: Optional[int] = Field(default=None, ge=0, le=1_000_000)
     status: Optional[Literal["active", "suspended"]] = None

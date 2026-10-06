@@ -25,7 +25,15 @@ from fastapi import HTTPException, status
 from . import db as database
 from . import ncam
 from .config import settings
-from .security import AuthContext, ROLE_RESELLER, ROLE_SUPER_ADMIN, ROLE_USER, check_password_policy, hash_password
+from .security import (
+    ALL_ROLES,
+    AuthContext,
+    ROLE_RESELLER,
+    ROLE_SUPER_ADMIN,
+    ROLE_USER,
+    check_password_policy,
+    hash_password,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -218,11 +226,45 @@ def get_account(conn: sqlite3.Connection, ctx: AuthContext, account_id: int) -> 
     return user
 
 
+def count_super_admins(conn: sqlite3.Connection, exclude_id: int | None = None) -> int:
+    """Cuántos super administradores **activos** quedan (sin contar ``exclude_id``).
+
+    Se cuentan solo los activos porque una cuenta suspendida no puede entrar
+    (el login la rechaza): si se dejara como único administrador uno suspendido,
+    el panel quedaría bloqueado.
+    """
+    sql = "SELECT COUNT(*) AS c FROM users WHERE role = ? AND status = 'active'"
+    params: list[Any] = [ROLE_SUPER_ADMIN]
+    if exclude_id is not None:
+        sql += " AND id != ?"
+        params.append(int(exclude_id))
+    return int(database.query_one(conn, sql, params)["c"])
+
+
+def _ensure_another_super_admin(conn: sqlite3.Connection, user: sqlite3.Row, action: str) -> None:
+    """Impide dejar el panel sin ningún super administrador activo."""
+    if user["role"] != ROLE_SUPER_ADMIN or user["status"] != "active":
+        return
+    if count_super_admins(conn, exclude_id=int(user["id"])) == 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                f"No se puede {action} el único super administrador activo: cree antes otro "
+                "(ncam-ng-ctl admin add USUARIO)"
+            ),
+        )
+
+
 def create_account(conn: sqlite3.Connection, ctx: AuthContext, payload: dict[str, Any]) -> sqlite3.Row:
     role = payload.get("role") or ROLE_USER
 
-    if role == ROLE_SUPER_ADMIN:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No se pueden crear super administradores")
+    if role not in ALL_ROLES:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Rol desconocido")
+    if role == ROLE_SUPER_ADMIN and not ctx.is_super_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Solo un super administrador puede crear otro super administrador",
+        )
     if ctx.is_reseller and role != ROLE_USER:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -238,7 +280,7 @@ def create_account(conn: sqlite3.Connection, ctx: AuthContext, payload: dict[str
     password = payload["password"]
     check_password_policy(password)
 
-    parent_id = ctx.id if ctx.is_reseller else payload.get("parent_id")
+    parent_id = None if role == ROLE_SUPER_ADMIN else (ctx.id if ctx.is_reseller else payload.get("parent_id"))
     if parent_id is not None:
         parent = _locked_user(conn, int(parent_id))
         if ctx.is_reseller and int(parent["id"]) != ctx.id:
@@ -290,9 +332,31 @@ def update_account(conn: sqlite3.Connection, ctx: AuthContext, account_id: int, 
             values[field] = payload[field]
             changes[field] = payload[field]
 
+    new_role = payload.get("role")
+    if new_role is not None and new_role != user["role"]:
+        if not ctx.is_super_admin:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Solo un super administrador puede cambiar el rol de una cuenta",
+            )
+        if new_role not in ALL_ROLES:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Rol desconocido")
+        if int(user["id"]) == ctx.id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, detail="No puede cambiarse el rol a sí mismo"
+            )
+        _ensure_another_super_admin(conn, user, "degradar")
+        values["role"] = new_role
+        changes["role"] = f"{user['role']} -> {new_role}"
+        if new_role == ROLE_SUPER_ADMIN:
+            # un super administrador no depende de nadie
+            values["parent_id"] = None
+
     if payload.get("status"):
         if payload["status"] == "suspended" and int(user["id"]) == ctx.id:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No puede suspenderse a sí mismo")
+        if payload["status"] == "suspended" and user["role"] == ROLE_SUPER_ADMIN and user["status"] == "active":
+            _ensure_another_super_admin(conn, user, "suspender")
         values["status"] = payload["status"]
         changes["status"] = payload["status"]
 
@@ -317,6 +381,7 @@ def delete_account(conn: sqlite3.Connection, ctx: AuthContext, account_id: int) 
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No puede eliminar su propia cuenta")
     if not ctx.is_super_admin and user["role"] != ROLE_USER:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Solo el super admin elimina revendedores")
+    _ensure_another_super_admin(conn, user, "eliminar")
 
     database.execute(conn, "DELETE FROM users WHERE id = ?", (account_id,))
     audit(conn, ctx, "account.delete", "user", account_id, {"username": user["username"]})

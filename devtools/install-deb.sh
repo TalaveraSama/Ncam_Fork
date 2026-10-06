@@ -335,6 +335,7 @@ if [ "$ONLY" != "daemon" ]; then
 	say "Panel:    systemctl status ncam-panel   |  journalctl -u ncam-panel -f"
 	say "          Web:     http://TU_IP:8080"
 	say "          Ajustes: /opt/ncam-ng-panel/.env   |   Datos: /var/lib/ncam-ng-panel/panel.db"
+	say "          Cuentas: ncam-ng-ctl admin   |   otro administrador: ncam-ng-ctl admin add USUARIO"
 	say "          Entorno: sudo ncam-ng-panel-setup --online"
 fi
 say ""

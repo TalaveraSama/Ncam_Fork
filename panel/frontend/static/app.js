@@ -647,8 +647,13 @@ function openExportDialog(line) {
 async function viewAccounts(el) {
   const { items } = await api("/accounts");
   const isSuper = state.user.role === "super_admin";
+  const supers = items.filter((item) => item.role === "super_admin");
   const resellers = items.filter((item) => item.role === "reseller");
   const users = items.filter((item) => item.role === "user");
+  // el último super administrador activo no se puede borrar ni degradar
+  const lastSuperAdmin = (account) =>
+    account.role === "super_admin" && account.status === "active" &&
+    supers.filter((item) => item.status === "active").length <= 1;
 
   el.innerHTML = `
     <div class="toolbar">
@@ -658,7 +663,7 @@ async function viewAccounts(el) {
     </div>
     <div class="grid kpi">
       <div class="card"><h3>Cuentas visibles</h3><div class="value">${fmtNumber(items.length)}</div>
-        <div class="hint">${resellers.length} resellers · ${users.length} usuarios</div></div>
+        <div class="hint">${supers.length} admin · ${resellers.length} resellers · ${users.length} usuarios</div></div>
       <div class="card"><h3>Créditos en cartera</h3>
         <div class="value">${fmtNumber(items.reduce((sum, item) => sum + (item.credits || 0), 0))}</div>
         <div class="hint">suma de saldos visibles</div></div>
@@ -687,9 +692,9 @@ async function viewAccounts(el) {
         <td class="actions">
           ${isSuper ? `<button class="btn small blue" data-act="credits" data-id="${account.id}">+ Créditos</button>` : ""}
           ${account.role !== "super_admin" ? `<button class="btn small ghost" data-act="transfer" data-id="${account.id}">Transferir</button>` : ""}
-          ${account.id === state.user.id || account.role !== "super_admin" ? `<button class="btn small ghost" data-act="edit" data-id="${account.id}">Editar</button>` : ""}
+          ${isSuper || account.id === state.user.id || account.role !== "super_admin" ? `<button class="btn small ghost" data-act="edit" data-id="${account.id}">Editar</button>` : ""}
           <button class="btn small ghost" data-act="apikey" data-id="${account.id}">API key</button>
-          ${account.id !== state.user.id && account.role !== "super_admin"
+          ${account.id !== state.user.id && !lastSuperAdmin(account)
             ? `<button class="btn small danger" data-act="del" data-id="${account.id}">Borrar</button>` : ""}
         </td>
       </tr>`).join("") : `<tr><td colspan="9" class="empty">Sin cuentas que mostrar.</td></tr>`;
@@ -776,9 +781,20 @@ function openAccountForm(onDone, account = null) {
       <label>Contraseña<input name="password" type="password" required minlength="8"></label>
     </div>
     ${isSuper ? `<label>Rol<select name="role">
-        <option value="user">Usuario final</option>
-        <option value="reseller">Revendedor</option>
-      </select></label>` : ""}`}
+        <option value="user">Usuario final (solo sus líneas, sin gestión)</option>
+        <option value="reseller" ${editing ? "" : "selected"}>Revendedor (sus líneas y sus usuarios)</option>
+        <option value="super_admin">Administrador (control total del panel)</option>
+      </select></label>
+      <div class="hint">Un <strong>administrador</strong> (super admin) puede crear otros
+      administradores, repartir créditos, tocar los Ajustes y ver la auditoría completa.</div>` : ""}`}
+    ${editing && isSuper ? `<label>Rol actual<select name="role" ${account.id === state.user.id ? "disabled" : ""}>
+        <option value="super_admin" ${account.role === "super_admin" ? "selected" : ""}>Administrador (control total)</option>
+        <option value="reseller" ${account.role === "reseller" ? "selected" : ""}>Revendedor</option>
+        <option value="user" ${account.role === "user" ? "selected" : ""}>Usuario final</option>
+      </select></label>
+      <div class="hint">${account.id === state.user.id
+        ? "No puede cambiarse el rol a sí mismo."
+        : "Cambiar de rol no borra sus líneas; los usuarios de un revendedor quedan sin padre."}</div>` : ""}
     ${editing ? `<label>Nueva contraseña (vacío = sin cambios)<input name="password" type="password" minlength="8"></label>` : ""}
     <div class="row">
       <label>Email<input name="email" type="email" value="${esc(account?.email || "")}"></label>
@@ -799,6 +815,7 @@ function openAccountForm(onDone, account = null) {
       if (editing) {
         const payload = { email: data.email, notes: data.notes, status: data.status };
         if (data.password) payload.password = data.password;
+        if (isSuper && data.role && data.role !== account.role) payload.role = data.role;
         if (isSuper && data.credits !== undefined) payload.credits = Number(data.credits);
         if (isSuper && data.max_lines !== undefined) payload.max_lines = Number(data.max_lines);
         await api(`/accounts/${account.id}`, { method: "PATCH", body: payload });

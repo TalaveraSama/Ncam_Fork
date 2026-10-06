@@ -118,9 +118,22 @@ PYTHONPATH=backend python3 -m app.seed --demo
 
 | Rol | Permisos |
 |---|---|
-| **super_admin** | Control total: crea/edita **resellers** y usuarios, emite y ajusta créditos, define ajustes globales y del motor de caché, ve toda la auditoría. |
+| **super_admin** | Control total: crea/edita **resellers**, usuarios y **otros administradores**, emite y ajusta créditos, define ajustes globales y del motor de caché, ve toda la auditoría. |
 | **reseller** | Gestiona **sus** líneas y **sus** usuarios finales, con saldo de créditos que se descuenta al crear/renovar líneas; puede transferir créditos a sus usuarios y rotar su API key. No ve datos de otros resellers. |
 | **user** | Solo lectura de sus propias líneas (credenciales, caducidad) y su saldo. |
+
+Puedes tener **varios administradores** (mismo control total), desde la web
+(**Revendedores y usuarios** → *Nueva cuenta* → rol *Administrador*) o por consola
+en el servidor:
+
+```bash
+sudo ncam-ng-ctl admin add maria          # otro administrador (muestra su clave una vez)
+sudo ncam-ng-ctl admin add luis reseller  # revendedor
+sudo ncam-ng-ctl admin                    # lista las cuentas y sus roles
+```
+
+Nunca se queda el panel sin administrador activo: no se puede degradar, suspender
+ni borrar al último (la web esconde el botón y el comando lo avisa).
 
 ### Consumo y facturación por ECM
 

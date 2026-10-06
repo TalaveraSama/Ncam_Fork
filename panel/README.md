@@ -53,6 +53,31 @@ PYTHONPATH=backend python3 -m app.seed --demo
 PYTHONPATH=backend python3 -m app.seed --username admin --reset-password
 ```
 
+**Más administradores** (todos con control total), sin volver a instalar nada:
+
+```bash
+# en el servidor, con el paquete .deb instalado:
+sudo ncam-ng-ctl admin add maria                  # super admin (clave aleatoria)
+sudo ncam-ng-ctl admin add luis reseller          # otro rol
+sudo ncam-ng-ctl admin role maria reseller        # cambia el rol de una cuenta
+sudo ncam-ng-ctl admin                            # lista las cuentas
+
+# desde el código (mismo programa que usa el comando anterior):
+PYTHONPATH=backend python3 -m app.seed --create --username maria --role super_admin
+PYTHONPATH=backend python3 -m app.seed --list
+PYTHONPATH=backend python3 -m app.seed --set-role maria reseller
+PYTHONPATH=backend python3 -m app.seed --delete maria
+```
+
+También desde la web: **Revendedores y usuarios** → *Nueva cuenta* → **Rol →
+Administrador**; en la ficha de una cuenta puedes cambiarle el rol. Reglas:
+
+* solo un **super admin** puede crear o ascender a otro super admin (un reseller
+  recibe `403`), y nadie puede cambiarse el rol a sí mismo;
+* el panel **nunca se queda sin administrador activo**: no se puede degradar,
+  suspender ni borrar al último (la API responde `400` y la web esconde el botón);
+* cambiar de rol no borra las líneas de la cuenta.
+
 ### Variables de entorno principales
 
 | Variable | Por defecto | Descripción |

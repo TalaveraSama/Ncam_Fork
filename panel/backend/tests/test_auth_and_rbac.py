@@ -82,13 +82,24 @@ def test_reseller_can_create_final_user(client, reseller_token):
     assert response.json()["parent_id"] is not None
 
 
-def test_nobody_can_create_super_admins(client, admin_token):
+def test_only_super_admins_can_create_super_admins(client, admin_token, reseller_token):
+    """El super admin sí puede crear más administradores; el revendedor, no."""
     response = client.post(
         "/api/v1/accounts",
         headers=auth_headers(admin_token),
         json={"username": "otro_admin", "password": "Secreta!2026", "role": "super_admin"},
     )
-    assert response.status_code == 403
+    assert response.status_code == 201, response.text
+    assert response.json()["role"] == "super_admin"
+
+    # el revendedor sigue sin poder hacerlo
+    negado = client.post(
+        "/api/v1/accounts",
+        headers=auth_headers(reseller_token),
+        json={"username": "otro_intruso", "password": "Secreta!2026", "role": "super_admin"},
+    )
+    assert negado.status_code == 403
+    assert "super administrador" in negado.json()["detail"]
 
 
 def test_final_user_is_read_only(client, client_token, admin_token):

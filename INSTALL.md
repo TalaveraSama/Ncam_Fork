@@ -93,8 +93,13 @@ Detalles que conviene saber:
 * El **super administrador de NCPanel** se crea en la instalación y la contraseña
   se imprime **una sola vez** en la propia salida de `apt`; guárdala. Si la
   pierdes:
+  `sudo ncam-ng-ctl passwd admin` (o a mano:
   `sudo -u ncam-panel /opt/ncam-ng-panel/.venv/bin/python -m app.seed --username admin --reset-password`
-  (con `PYTHONPATH=/opt/ncam-ng-panel/backend` y `NCAM_PANEL_DB=/var/lib/ncam-ng-panel/panel.db`).
+  con `PYTHONPATH=/opt/ncam-ng-panel/backend` y `NCAM_PANEL_DB=/var/lib/ncam-ng-panel/panel.db`).
+* Puedes tener **varios administradores** (todos con control total):
+  `sudo ncam-ng-ctl admin add maria`. Se gestionan desde la web
+  (**Revendedores y usuarios** → *Nueva cuenta* → rol *Administrador*) o con
+  `ncam-ng-ctl admin add|role|del|passwd`, y se ven con `ncam-ng-ctl admin`.
 * El **WebIf del daemon** trae el usuario `admin`/`ncam`: cámbialo en
   `/etc/ncam/ncam.conf` (`[webif] httppwd`) y `sudo systemctl restart ncam`.
 * El **emulador (SoftCam.Key)** lee las claves de `/etc/ncam/SoftCam.Key`:
@@ -477,7 +482,9 @@ esquema v4 añade las columnas de avisos y de consumo de ECM).
 | `ModuleNotFoundError: No module named 'app'` | Ejecuta siempre desde `panel/` con `PYTHONPATH=backend` (o usa `./run.sh`). |
 | `ncam-ng-panel depende de python3-venv pero no se instalará` | `sudo apt install python3-venv python3-pip` y repite `sudo apt install ./ncam-ng-panel_*.deb`. |
 | Instalé el `.deb` y el panel no arranca | `sudo journalctl -u ncam-panel -n 40`; casi siempre es el entorno de Python: `sudo ncam-ng-panel-setup --online`. |
-| Perdí la contraseña del super administrador | `sudo -u ncam-panel PYTHONPATH=/opt/ncam-ng-panel/backend NCAM_PANEL_DB=/var/lib/ncam-ng-panel/panel.db /opt/ncam-ng-panel/.venv/bin/python -m app.seed --username admin --reset-password` (la imprime una vez). |
+| Perdí la contraseña del super administrador | `sudo ncam-ng-ctl passwd admin` (la imprime una vez). A mano: `sudo -u ncam-panel PYTHONPATH=/opt/ncam-ng-panel/backend NCAM_PANEL_DB=/var/lib/ncam-ng-panel/panel.db /opt/ncam-ng-panel/.venv/bin/python -m app.seed --username admin --reset-password`. |
+| Quiero otro administrador del panel | `sudo ncam-ng-ctl admin add USUARIO` (por defecto `super_admin`), o desde la web: **Revendedores y usuarios** → *Nueva cuenta* → rol *Administrador*. |
+| Me he quedado sin administrador activo | El panel no lo permite (avisa con `400`/consola). Si te bloqueaste por otra vía, crea uno con `sudo ncam-ng-ctl admin add nuevo_admin`. |
 | El panel no ve el daemon tras instalar los `.deb` | El panel usa `NCAM_WEBIF_URL` de `/opt/ncam-ng-panel/.env`; por defecto `http://127.0.0.1:8181`. Revisa que el daemon escuche (`ss -ltnp | grep 8181`) y que sus credenciales del WebIf coincidan. |
 | `dpkg: error ... el paquete está en un estado muy malo` | `sudo apt --fix-broken install` y repite la instalación del `.deb`. |
 | Abrí `panel.db` con un editor y ahora el panel da error | `panel.db` es una base de datos **SQLite binaria**: un editor de textos la corrompe. Restaura una copia (`panel/backend/data/`, `/var/lib/ncam-ng-panel/`), o empieza de cero borrándola y volviendo a crear el super admin con `-m app.seed`. Para mirar su contenido usa `sqlite3 /var/lib/ncam-ng-panel/panel.db 'select username, role from users;'` (nunca un editor). |
@@ -510,6 +517,14 @@ ncam-ng-ctl webif add 191.103.121.243              # permite esa IP (tu casa / t
 ncam-ng-ctl webif add 10.0.0.0-10.0.0.255          # permite un rango
 ncam-ng-ctl webif add micasa.dyndns.org            # un dominio (va a httpdyndns)
 ncam-ng-ctl webif del 192.6.154.19                 # quita el acceso a esa IP
+
+ncam-ng-ctl admin                 # cuentas del panel: usuario, rol y estado
+ncam-ng-ctl admin add maria      # crea OTRO administrador (clave aleatoria, se muestra una vez)
+ncam-ng-ctl admin add luis reseller luis@ejemplo.com   # revendedor con su email
+ncam-ng-ctl admin add pepe user Clave.Pepe1            # usuario final con clave propia
+ncam-ng-ctl admin role luis reseller                   # cambia el rol de una cuenta
+ncam-ng-ctl admin del viejo                            # elimina una cuenta
+ncam-ng-ctl admin passwd maria                         # nueva contraseña para esa cuenta
 ```
 
 Qué usar según lo que cambies:
@@ -517,6 +532,7 @@ Qué usar según lo que cambies:
 | Cambias… | Comando |
 | --- | --- |
 | quién entra al WebIf (tu IP, la de tu VPN) | `ncam-ng-ctl webif add TU_IP` (edita y reinicia solo) |
+| quién administra el panel (más administradores) | `ncam-ng-ctl admin add USUARIO` |
 | `[webif]`, `[cache]`, `[cccam]`… en `/etc/ncam/ncam.conf` | `restart-ncam` |
 | puerto, WebIf del daemon o avisos en `/opt/ncam-ng-panel/.env` | `restart-ncam-panel` |
 | el binario del daemon (compilación nueva) | `restart-ncam` |
@@ -535,6 +551,13 @@ Notas:
   copia de seguridad `ncam.conf.bak-AAAAmmdd-HHMMSS`. Detalles y ejemplos con la
   IP de un VPS y la de una VPN: §12 de
   [`docs/configuracion-optima.md`](docs/configuracion-optima.md).
+* `ncam-ng-ctl admin` **no reinicia nada**: las cuentas se leen de la base de datos
+  en cada petición. Sirve para tener varios administradores: todos los
+  `super_admin` tienen el mismo control total, y solo el propio super
+  administrador (o este comando) puede crear otros; un revendedor nunca puede
+  ascender a nadie. **Nunca se queda el panel sin administrador activo**: no se
+  puede degradar, suspender ni borrar al último (el comando lo avisa y no toca
+  nada). Detalles: §2 y §3 de [`panel/README.md`](panel/README.md).
 
 ---
 

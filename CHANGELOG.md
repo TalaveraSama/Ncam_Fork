@@ -1,5 +1,30 @@
 # Changelog
 
+## [2.4.1] - 2026-10-06 — varios administradores en NCPanel
+
+* **Más de un super administrador.** Todos tienen el mismo control total y se
+  pueden crear desde la web (**Revendedores y usuarios** → *Nueva cuenta* → rol
+  *Administrador*) o desde la consola:
+
+  ```bash
+  sudo ncam-ng-ctl admin add maria              # administrador (clave aleatoria, una vez)
+  sudo ncam-ng-ctl admin add luis reseller      # revendedor
+  sudo ncam-ng-ctl admin add pepe user Clave.Pepe1
+  sudo ncam-ng-ctl admin role luis reseller     # cambia el rol de una cuenta
+  sudo ncam-ng-ctl admin del viejo              # elimina una cuenta
+  sudo ncam-ng-ctl admin passwd maria           # nueva contraseña para esa cuenta
+  sudo ncam-ng-ctl admin                        # lista las cuentas y sus roles
+  ```
+
+* **El panel nunca se queda sin administrador activo**: no se puede degradar,
+  suspender ni eliminar al último super admin (ni desde la API, ni desde la web,
+  ni desde la consola). Cuentan solo los **activos**, porque una cuenta suspendida
+  no puede iniciar sesión. Nadie puede cambiarse el rol a sí mismo y un revendedor
+  no puede ascender a nadie (`403`).
+* Cada cambio de rol queda en la **auditoría** (`role: reseller -> super_admin`).
+* Pruebas: 7 nuevas del panel (73 en total) y 10 nuevas de los instaladores
+  (48 en total), más 5 del frontend que comprueban el alta de administradores.
+
 ## [2.4.0] - 2026-10-06 — acceso al WebIf desde tu IP pública o VPN
 
 * Nuevo comando para no editar `ncam.conf` a mano:

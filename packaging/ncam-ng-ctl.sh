@@ -10,6 +10,15 @@
 #   ncam-ng-ctl passwd [usuario]        nueva contraseña del panel (una vez)
 #   ncam-ng-ctl version                 versiones instaladas
 #
+#   ncam-ng-ctl admin                   cuentas del panel (usuario, rol, estado)
+#   ncam-ng-ctl admin add USUARIO [ROL] [CLAVE] [EMAIL]
+#                                       crea un administrador (por defecto
+#                                       super_admin) o un revendedor; la clave
+#                                       se genera y se muestra una vez
+#   ncam-ng-ctl admin role USUARIO ROL  cambia el rol de una cuenta
+#   ncam-ng-ctl admin del USUARIO       elimina una cuenta del panel
+#   ncam-ng-ctl admin passwd USUARIO    nueva contraseña para esa cuenta
+#
 #   ncam-ng-ctl webif                   quién puede entrar al WebIf (IPs permitidas)
 #   ncam-ng-ctl webif add IP|RANGO|DOMINIO [...]    permite ese acceso
 #   ncam-ng-ctl webif del IP|RANGO|DOMINIO [...]    quita ese acceso
@@ -41,6 +50,8 @@ LINES=50
 USERNAME=""
 WEBIF_OP=""
 WEBIF_ITEMS=""
+ADMIN_OP=""
+ADMIN_ITEMS=""
 NO_RESTART=0
 
 # Los argumentos se van consumiendo al analizarlos, así que se guarda una copia
@@ -74,7 +85,7 @@ validate_args() {
 					''|*[!0-9]*) echo "error: --lines necesita un número" >&2; exit 2 ;;
 				esac
 				shift 2 ;;
-			-f|--follow|--dry-run|--no-restart|-h|--help|status|start|stop|restart|logs|config|passwd|version|webif|help) shift ;;
+			-f|--follow|--dry-run|--no-restart|-h|--help|status|start|stop|restart|logs|config|passwd|version|webif|admin|help) shift ;;
 			-*) echo "opción no reconocida: $1 (usa --help)" >&2; exit 2 ;;
 			*) shift ;;
 		esac
@@ -84,9 +95,16 @@ validate_args "$@"
 
 while [ $# -gt 0 ]; do
 	case "$1" in
-		status|start|stop|restart|logs|config|passwd|version|webif|help)
+		status|start|stop|restart|logs|config|passwd|version|webif|admin|help)
 			if [ -z "$ACTION" ]; then
 				ACTION="$1"
+			elif [ "$ACTION" = "admin" ] && [ -z "$ADMIN_OP" ] \
+				&& { [ "$1" = "add" ] || [ "$1" = "del" ] || [ "$1" = "remove" ] \
+					|| [ "$1" = "role" ] || [ "$1" = "passwd" ] || [ "$1" = "list" ]; }; then
+				case "$1" in
+					remove) ADMIN_OP="del" ;;
+					*)      ADMIN_OP="$1" ;;
+				esac
 			elif [ "$ACTION" = "webif" ] && [ -z "$WEBIF_OP" ] \
 				&& { [ "$1" = "add" ] || [ "$1" = "del" ] || [ "$1" = "remove" ] || [ "$1" = "list" ]; }; then
 				case "$1" in
@@ -95,6 +113,10 @@ while [ $# -gt 0 ]; do
 				esac
 			elif [ "$ACTION" = "passwd" ]; then
 				USERNAME="$1"     # ncam-ng-ctl passwd <usuario>
+			elif [ "$ACTION" = "admin" ]; then
+				ADMIN_ITEMS="$ADMIN_ITEMS $1"   # el usuario puede llamarse "admin", "version"...
+			elif [ "$ACTION" = "webif" ]; then
+				WEBIF_ITEMS="$WEBIF_ITEMS $1"
 			else
 				die "sobra el argumento '$1' (usa --help)"
 			fi
@@ -109,7 +131,16 @@ while [ $# -gt 0 ]; do
 		-h|--help)   usage; exit 0 ;;
 		-*)          die "opción no reconocida: $1 (usa --help)" ;;
 		*)
-			if [ "$ACTION" = "passwd" ] && [ -z "$USERNAME" ]; then
+			if [ "$ACTION" = "admin" ] && [ -z "$ADMIN_OP" ] \
+				&& { [ "$1" = "add" ] || [ "$1" = "del" ] || [ "$1" = "remove" ] \
+					|| [ "$1" = "role" ] || [ "$1" = "passwd" ] || [ "$1" = "list" ]; }; then
+				case "$1" in
+					remove) ADMIN_OP="del" ;;
+					*)      ADMIN_OP="$1" ;;
+				esac
+			elif [ "$ACTION" = "admin" ]; then
+				ADMIN_ITEMS="$ADMIN_ITEMS $1"    # ncam-ng-ctl admin add USUARIO [rol] [clave] [email]
+			elif [ "$ACTION" = "passwd" ] && [ -z "$USERNAME" ]; then
 				USERNAME="$1"
 			elif [ "$ACTION" = "webif" ] && [ -z "$WEBIF_OP" ] \
 				&& { [ "$1" = "add" ] || [ "$1" = "del" ] || [ "$1" = "remove" ] || [ "$1" = "list" ]; }; then
@@ -690,24 +721,117 @@ do_config() {
 	return 0
 }
 
-do_passwd() {
+panel_seed() {   # ejecuta `app.seed` como el usuario del panel, con su base de datos
 	venv="$PANEL_DIR/.venv/bin/python"
-	if [ "$DRY" = "0" ]; then
-		[ -x "$venv" ] || die "no encuentro el entorno del panel ($venv); ¿falta el paquete ncam-ng-panel?"
-	fi
-	user="${USERNAME:-admin}"
 	db="${NCAM_PANEL_DB:-$PANEL_DB_DEFAULT}"
+	if [ "$DRY" = "1" ]; then
+		say "  [dry-run] PYTHONPATH=$PANEL_DIR/backend NCAM_PANEL_DB=$db $venv -m app.seed $*"
+		return 0
+	fi
+	[ -x "$venv" ] || die "no encuentro el entorno del panel ($venv); ¿falta el paquete ncam-ng-panel?"
 	[ -f "$db" ] || say "aviso: aún no existe $db; se creará ahora"
-
 	cmd_python=runuser
 	command -v runuser >/dev/null 2>&1 || cmd_python=sudo
+	$cmd_python -u "$PANEL_SERVICE" -- env PYTHONPATH="$PANEL_DIR/backend" NCAM_PANEL_DB="$db" \
+		"$venv" -m app.seed "$@"
+}
+
+do_passwd() {
+	user="${USERNAME:-admin}"
 	if [ "$DRY" = "1" ]; then
-		say "  [dry-run] PYTHONPATH=$PANEL_DIR/backend NCAM_PANEL_DB=$db $venv -m app.seed --username $user --reset-password"
+		panel_seed --username "$user" --reset-password
 		return 0
 	fi
 	say "==> generando una contraseña nueva para '$user'"
-	$cmd_python -u "$PANEL_SERVICE" -- env PYTHONPATH="$PANEL_DIR/backend" NCAM_PANEL_DB="$db" \
-		"$venv" -m app.seed --username "$user" --reset-password
+	panel_seed --username "$user" --reset-password
+	return 0
+}
+
+do_admin() {
+	op="$ADMIN_OP"
+	if [ -z "$op" ]; then
+		# `ncam-ng-ctl admin` sin nada lista las cuentas, pero si viene un
+		# argumento suelto ("admin borrar cosas") es un error de uso.
+		if [ -n "$ADMIN_ITEMS" ]; then
+			die "uso: ncam-ng-ctl admin [add|role|del|passwd] ...  (usa --help)"
+		fi
+		op="list"
+	fi
+
+	case "$op" in
+		list)
+			say "==> cuentas del panel (super admin, revendedores y usuarios)"
+			panel_seed --list
+			;;
+
+		add)
+			# ncam-ng-ctl admin add USUARIO [super_admin|reseller|user] [CLAVE] [EMAIL]
+			items="$ADMIN_ITEMS"
+			set -- $items
+			[ $# -ge 1 ] || die "uso: ncam-ng-ctl admin add USUARIO [super_admin|reseller|user] [CLAVE] [EMAIL]"
+			auser="$1"; shift
+			arole="super_admin"
+			apass=""
+			amail=""
+			for item in "$@"; do
+				case "$item" in
+					super_admin|superadmin|admin|super) arole="super_admin" ;;
+					reseller|revendedor)               arole="reseller" ;;
+					user|usuario|cliente)              arole="user" ;;
+					*@*)                               amail="$item" ;;
+					*)                                 apass="$item" ;;
+				esac
+			done
+
+			say "==> creando la cuenta '$auser' (rol: $arole)"
+			if [ "$DRY" = "1" ]; then
+				if [ -n "$apass" ]; then
+					panel_seed --create --username "$auser" --role "$arole" --password "$apass" ${amail:+--email "$amail"}
+				else
+					panel_seed --create --username "$auser" --role "$arole" ${amail:+--email "$amail"}
+				fi
+				return 0
+			fi
+			if [ -n "$apass" ]; then
+				panel_seed --create --username "$auser" --role "$arole" --password "$apass" ${amail:+--email "$amail"}
+			else
+				panel_seed --create --username "$auser" --role "$arole" ${amail:+--email "$amail"}
+			fi
+			say ""
+			pp="$(panel_port)"
+			[ "$arole" = "super_admin" ] && say "  Ya puede entrar en http://<tu-ip>:$pp con ese usuario y contraseña."
+			say "  Ver las cuentas:      ncam-ng-ctl admin"
+			say "  Cambiar su rol:       ncam-ng-ctl admin role $auser reseller"
+			;;
+
+		role)
+			items="$ADMIN_ITEMS"
+			set -- $items
+			[ $# -eq 2 ] || die "uso: ncam-ng-ctl admin role USUARIO super_admin|reseller|user"
+			say "==> cambiando el rol de '$1' a '$2'"
+			panel_seed --set-role "$1" "$2"
+			;;
+
+		del)
+			items="$ADMIN_ITEMS"
+			set -- $items
+			[ $# -eq 1 ] || die "uso: ncam-ng-ctl admin del USUARIO"
+			say "==> eliminando la cuenta '$1'"
+			panel_seed --delete "$1"
+			;;
+
+		passwd)
+			items="$ADMIN_ITEMS"
+			set -- $items
+			[ $# -eq 1 ] || die "uso: ncam-ng-ctl admin passwd USUARIO (o: ncam-ng-ctl passwd USUARIO)"
+			USERNAME="$1"
+			do_passwd
+			;;
+
+		*)
+			die "opción desconocida de admin: '$op' (usa --help)"
+			;;
+	esac
 	return 0
 }
 
@@ -735,6 +859,7 @@ case "$ACTION" in
 	logs)    do_logs ;;
 	config)  do_config ;;
 	passwd)  do_passwd ;;
+	admin)   do_admin ;;
 	version) do_version ;;
 	webif)
 		case "$WEBIF_OP" in
