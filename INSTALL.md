@@ -191,17 +191,30 @@ Edita `/usr/local/etc/ncam.conf`:
 
 ```ini
 [webif]
-httpport    = 8181                 # puerto del WebIf (JSON API + página del motor)
-httpuser    = admin                # cámbialo siempre
-httppwd     = TU_CLAVE_WEBIF       # obliga a autenticarse (Digest MD5)
-httpallowed = 127.0.0.1,192.168.0.0-192.168.255.255
+# puerto del WebIf (JSON API + página del motor)
+httpport     = 8181
+# cámbialo siempre
+httpuser     = admin
+# obliga a autenticarse (Digest MD5)
+httppwd      = TU_CLAVE_WEBIF
+httpallowed  = 127.0.0.1,192.168.0.0-192.168.255.255
 
-[cache]                            # motor de caché v2 (nuevo)
-max_time        = 15               # segundos que vive un CW en caché
-max_entries     = 1000             # límite de contenedores (0 = ilimitado) + expulsión LRU
-max_hit_time    = 15
-delay           = 120
+# motor de caché v2 (nuevo)
+[cache]
+# segundos que vive un CW en caché
+max_time     = 15
+# límite de contenedores (0 = ilimitado) + expulsión LRU
+max_entries  = 1000
+max_hit_time = 15
+# milisegundos de espera al servir desde caché (0 = al instante)
+delay        = 0
 ```
+
+> **Los comentarios van en su propia línea.** NCam solo ignora las líneas que
+> **empiezan** por `#` (comprobado en el código: `ncam-config-global.c`); un
+> `#` o un `;` detrás de un valor se toma como **parte del valor**. Un
+> `httpuser = admin   # cámbialo` deja el usuario literalmente como
+> `admin   # cámbialo` (`nodeid`, `httppwd` y las rutas fallan igual).
 
 ### 5. Arrancar y comprobar
 
@@ -314,10 +327,14 @@ cp .env.example .env
 Ajusta `.env` como mínimo:
 
 ```ini
-NCAM_WEBIF_URL=http://127.0.0.1:8181      # WebIf del daemon (paso A)
-NCAM_WEBIF_USER=admin                     # httpuser del daemon
-NCAM_WEBIF_PASSWORD=TU_CLAVE_WEBIF        # httppwd del daemon (Digest MD5)
-NCAM_PANEL_SECRET=...                     # python3 -c "import secrets;print(secrets.token_urlsafe(48))"
+# WebIf del daemon (paso A)
+NCAM_WEBIF_URL=http://127.0.0.1:8181
+# httpuser del daemon
+NCAM_WEBIF_USER=admin
+# httppwd del daemon (Digest MD5)
+NCAM_WEBIF_PASSWORD=TU_CLAVE_WEBIF
+# python3 -c "import secrets;print(secrets.token_urlsafe(48))"
+NCAM_PANEL_SECRET=...
 NCAM_PANEL_PORT=8080
 ```
 
@@ -487,12 +504,19 @@ ncam-ng-ctl config ncam           # edita /etc/ncam/ncam.conf y avisa de reinici
 ncam-ng-ctl config panel          # edita /opt/ncam-ng-panel/.env
 ncam-ng-ctl passwd                # nueva contraseña del super admin (se muestra una vez)
 ncam-ng-ctl version               # versiones instaladas y del binario
+
+ncam-ng-ctl webif                 # quién puede entrar al WebIf y de qué tipo es cada IP
+ncam-ng-ctl webif add 191.103.121.243              # permite esa IP (tu casa / tu VPN)
+ncam-ng-ctl webif add 10.0.0.0-10.0.0.255          # permite un rango
+ncam-ng-ctl webif add micasa.dyndns.org            # un dominio (va a httpdyndns)
+ncam-ng-ctl webif del 192.6.154.19                 # quita el acceso a esa IP
 ```
 
 Qué usar según lo que cambies:
 
 | Cambias… | Comando |
 | --- | --- |
+| quién entra al WebIf (tu IP, la de tu VPN) | `ncam-ng-ctl webif add TU_IP` (edita y reinicia solo) |
 | `[webif]`, `[cache]`, `[cccam]`… en `/etc/ncam/ncam.conf` | `restart-ncam` |
 | puerto, WebIf del daemon o avisos en `/opt/ncam-ng-panel/.env` | `restart-ncam-panel` |
 | el binario del daemon (compilación nueva) | `restart-ncam` |
@@ -506,6 +530,11 @@ Notas:
 * Si prefieres systemd de toda la vida:
   `sudo systemctl restart ncam` / `sudo systemctl restart ncam-panel`.
 * `--dry-run` muestra lo que haría sin tocar nada (útil para comprobar el destino).
+* `ncam-ng-ctl webif` escribe en `httpallowed` la lista de **IPs de quien se
+  conecta** (no las del servidor) y en `httpdyndns` los dominios (máximo 3), con
+  copia de seguridad `ncam.conf.bak-AAAAmmdd-HHMMSS`. Detalles y ejemplos con la
+  IP de un VPS y la de una VPN: §12 de
+  [`docs/configuracion-optima.md`](docs/configuracion-optima.md).
 
 ---
 

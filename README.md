@@ -44,11 +44,20 @@ principales:
 
 ```ini
 [cache]
-delay        = 120
-max_time     = 15      ; segundos que un ECM permanece en la caché
-max_entries  = 0       ; NCam-NG: 0 = ilimitado; p. ej. 200000 en equipos con poca RAM
+# milisegundos de espera antes de responder desde caché (0 = al instante)
+delay        = 0
+# segundos que un ECM permanece en la caché
+max_time     = 15
+# NCam-NG: 0 = ilimitado; p. ej. 200000 en equipos con poca RAM
+max_entries  = 0
 max_hit_time = 15
 ```
+
+> **Los comentarios van en su propia línea.** NCam solo ignora las líneas que
+> **empiezan** por `#` (comprobado en el código: `ncam-config-global.c`); un
+> `#` o un `;` detrás de un valor se toma como **parte del valor**. Un
+> `httpuser = admin   # cámbialo` deja el usuario literalmente como
+> `admin   # cámbialo` (`nodeid`, `httppwd` y las rutas fallan igual).
 
 ### Consulta de métricas
 
@@ -154,7 +163,13 @@ Debian 12/13). Con los paquetes instalados tienes atajos de consola:
 restart-ncam              # reinicia el daemon (WebIf + motor de caché)
 restart-ncam-panel        # reinicia el panel web
 ncam-ng-status            # estado, puertos y comprobación HTTP
+ncam-ng-ctl webif add TU_IP   # permite tu IP (casa/VPN) en el WebIf y reinicia
 ```
+
+> El WebIf solo atiende a las IPs de `httpallowed`/`httpdyndns` (las de **quien se
+> conecta**, no las del servidor) y usa autenticación **Digest**. Cómo dejar entrar
+> tu IP pública o la de tu VPN: §12 de
+> [`docs/configuracion-optima.md`](docs/configuracion-optima.md).
 
 Tras instalarlos, `sudo ncam-ng-install-deb` actualiza (o repara)
 la instalación con la última release.

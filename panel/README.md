@@ -287,15 +287,22 @@ Para probarlo sin daemon: `python3 tools/mock_ncam_webif.py --port 8181
 
 ```ini
 [webif]
-http_port = 8181
-httplocale = 1
-httpuser = panel
-httppwd  = una_clave_larga
+httpport    = 8181
+httpuser    = panel
+httppwd     = una_clave_larga
+# IPs (de quien se conecta) que pueden entrar; 127.0.0.1 basta si el panel
+# va en la misma máquina. Para un panel remoto: ncam-ng-ctl webif add TU_IP
+httpallowed = 127.0.0.1
 
 [cache]
 max_time    = 15
-max_entries = 0        ; p. ej. 200000 en servidores con memoria limitada
+# p. ej. 200000 en servidores con memoria limitada
+max_entries = 0
 ```
+
+> Los comentarios van en su propia línea: NCam solo ignora las líneas que
+> **empiezan** por `#`, así que un `#` detrás de un valor se toma como parte del
+> valor. Ojo también con la clave: es `httpport`, no `http_port`.
 
 2. En el panel, **Ajustes**: fije `panel.ncam_webif_url`,
    `panel.ncam_webif_user` y `panel.ncam_webif_password`.

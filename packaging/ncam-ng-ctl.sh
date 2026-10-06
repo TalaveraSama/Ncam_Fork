@@ -10,13 +10,19 @@
 #   ncam-ng-ctl passwd [usuario]        nueva contraseña del panel (una vez)
 #   ncam-ng-ctl version                 versiones instaladas
 #
+#   ncam-ng-ctl webif                   quién puede entrar al WebIf (IPs permitidas)
+#   ncam-ng-ctl webif add IP|RANGO|DOMINIO [...]    permite ese acceso
+#   ncam-ng-ctl webif del IP|RANGO|DOMINIO [...]    quita ese acceso
+#   ncam-ng-ctl webif add any           permite cualquier IP (¡con cuidado!)
+#
 # Atajos (instalados como enlaces a este mismo script):
 #
 #   restart-ncam          = ncam-ng-ctl restart ncam
 #   restart-ncam-panel    = ncam-ng-ctl restart panel
 #   ncam-ng-status        = ncam-ng-ctl status
 #
-# Opciones: --dry-run (solo muestra lo que haría), -n N / --lines N, -f / --follow
+# Opciones: --dry-run (solo muestra lo que haría), -n N / --lines N, -f / --follow,
+#           --no-restart (webif: cambia la configuración sin reiniciar el daemon)
 # ---------------------------------------------------------------------------
 set -e
 
@@ -33,6 +39,9 @@ DRY=0
 FOLLOW=0
 LINES=50
 USERNAME=""
+WEBIF_OP=""
+WEBIF_ITEMS=""
+NO_RESTART=0
 
 # Los argumentos se van consumiendo al analizarlos, así que se guarda una copia
 # para poder re-ejecutar el script con sudo conservándolos.
@@ -65,7 +74,7 @@ validate_args() {
 					''|*[!0-9]*) echo "error: --lines necesita un número" >&2; exit 2 ;;
 				esac
 				shift 2 ;;
-			-f|--follow|--dry-run|-h|--help|status|start|stop|restart|logs|config|passwd|version|help) shift ;;
+			-f|--follow|--dry-run|--no-restart|-h|--help|status|start|stop|restart|logs|config|passwd|version|webif|help) shift ;;
 			-*) echo "opción no reconocida: $1 (usa --help)" >&2; exit 2 ;;
 			*) shift ;;
 		esac
@@ -75,9 +84,15 @@ validate_args "$@"
 
 while [ $# -gt 0 ]; do
 	case "$1" in
-		status|start|stop|restart|logs|config|passwd|version|help)
+		status|start|stop|restart|logs|config|passwd|version|webif|help)
 			if [ -z "$ACTION" ]; then
 				ACTION="$1"
+			elif [ "$ACTION" = "webif" ] && [ -z "$WEBIF_OP" ] \
+				&& { [ "$1" = "add" ] || [ "$1" = "del" ] || [ "$1" = "remove" ] || [ "$1" = "list" ]; }; then
+				case "$1" in
+					remove) WEBIF_OP="del" ;;
+					*)      WEBIF_OP="$1" ;;
+				esac
 			elif [ "$ACTION" = "passwd" ]; then
 				USERNAME="$1"     # ncam-ng-ctl passwd <usuario>
 			else
@@ -87,14 +102,23 @@ while [ $# -gt 0 ]; do
 		ncam|daemon) TARGET="daemon"; shift ;;
 		panel)       TARGET="panel"; shift ;;
 		all|both)    TARGET="all"; shift ;;
-		-f|--follow) FOLLOW=1; shift ;;
-		-n|--lines)  LINES="$2"; shift 2 ;;
-		--dry-run)   DRY=1; shift ;;
+		-f|--follow)    FOLLOW=1; shift ;;
+		-n|--lines)     LINES="$2"; shift 2 ;;
+		--dry-run)      DRY=1; shift ;;
+		--no-restart)   NO_RESTART=1; shift ;;
 		-h|--help)   usage; exit 0 ;;
 		-*)          die "opción no reconocida: $1 (usa --help)" ;;
 		*)
 			if [ "$ACTION" = "passwd" ] && [ -z "$USERNAME" ]; then
 				USERNAME="$1"
+			elif [ "$ACTION" = "webif" ] && [ -z "$WEBIF_OP" ] \
+				&& { [ "$1" = "add" ] || [ "$1" = "del" ] || [ "$1" = "remove" ] || [ "$1" = "list" ]; }; then
+				case "$1" in
+					remove) WEBIF_OP="del" ;;
+					*)      WEBIF_OP="$1" ;;
+				esac
+			elif [ "$ACTION" = "webif" ]; then
+				WEBIF_ITEMS="$WEBIF_ITEMS $1"   # ncam-ng-ctl webif add <ip|rango|dominio> ...
 			else
 				die "argumento no reconocido: '$1' (usa --help)"
 			fi
@@ -113,6 +137,7 @@ fi
 NEED_ROOT=1
 case "$ACTION" in
 	status|version) NEED_ROOT=0 ;;
+	webif) [ -z "$WEBIF_OP" ] || [ "$WEBIF_OP" = "list" ] && NEED_ROOT=0 ;;
 esac
 [ "$DRY" = "1" ] && NEED_ROOT=0
 
@@ -211,6 +236,282 @@ wait_active() {   # wait_active <servicio> <segundos>
 		sleep 1
 	done
 	return 1
+}
+
+# ---------------------------------------------------------------------------
+# WebIf: quién puede entrar (httpallowed / httpdyndns de ncam.conf)
+# ---------------------------------------------------------------------------
+conf_value() {   # conf_value <clave>  -> valor de la última línea con esa clave
+	[ -r "$NCAM_CONF" ] || return 0
+	sed -n "s/^[[:space:]]*$1[[:space:]]*=[[:space:]]*//p" "$NCAM_CONF" | tail -n 1 \
+		| sed 's/[[:space:]]*$//'
+}
+
+is_ipv4() {   # is_ipv4 <texto>  -> 0 si es una IPv4 correcta
+	case "$1" in
+		*[!0-9.]*|'') return 1 ;;
+	esac
+	old_ifs=$IFS; IFS=.
+	# shellcheck disable=SC2086
+	set -- $1
+	IFS=$old_ifs
+	[ $# -eq 4 ] || return 1
+	for octet in "$@"; do
+		case "$octet" in
+			''|*[!0-9]*) return 1 ;;
+		esac
+		[ "$octet" -le 255 ] || return 1
+	done
+	return 0
+}
+
+is_iprange() {   # is_iprange <inicio-fin>
+	case "$1" in
+		*-*) ;;
+		*) return 1 ;;
+	esac
+	range_start=${1%%-*}
+	range_end=${1#*-}
+	case "$range_end" in
+		*-*) return 1 ;;
+	esac
+	is_ipv4 "$range_start" && is_ipv4 "$range_end"
+}
+
+is_hostname() {   # is_hostname <texto>  (para httpdyndns)
+	case "$1" in
+		*[!A-Za-z0-9.-]*|'') return 1 ;;
+	esac
+	case "$1" in
+		*.*) return 0 ;;
+		*) return 1 ;;
+	esac
+}
+
+looks_like_ip() {   # looks_like_ip <texto>  (para no confundir 999.1.1.1 con un dominio)
+	case "$1" in
+		*[!0-9.-]*|'') return 1 ;;
+	esac
+	return 0
+}
+
+is_private_ipv4() {
+	case "$1" in
+		10.*|127.*|192.168.*|172.1[6-9].*|172.2[0-9].*|172.3[01].*|169.254.*) return 0 ;;
+		*) return 1 ;;
+	esac
+}
+
+split_list() {   # split_list <a,b,c>  -> una entrada por línea
+	printf '%s' "$1" | tr ',' '\n' | sed 's/^[[:space:]]*//; s/[[:space:]]*$//' | grep -v '^$' || true
+}
+
+add_or_remove() {   # add_or_remove <lista> <entrada> <add|del>
+	list="$1"; item="$2"; op="$3"
+	result=""; found=0
+	while IFS= read -r entry; do
+		[ -n "$entry" ] || continue
+		if [ "$(printf '%s' "$entry" | tr 'A-Z' 'a-z')" = "$(printf '%s' "$item" | tr 'A-Z' 'a-z')" ]; then
+			found=1
+			[ "$op" = "del" ] && continue
+		fi
+		result="${result:+$result,}$entry"
+	done <<EOF
+$(split_list "$list")
+EOF
+	if [ "$op" = "add" ] && [ "$found" = "0" ]; then
+		result="${result:+$result,}$item"
+	fi
+	printf '%s' "$result"
+}
+
+conf_set() {   # conf_set <clave> <valor>  (mantiene el resto del fichero intacto)
+	key="$1"; value="$2"
+	tmp="$NCAM_CONF.ncam-ng-ctl.$$"
+	awk -v key="$key" -v value="$value" '
+		{ line[NR] = $0 }
+		END {
+			done = 0
+			for (i = 1; i <= NR; i++) {
+				low = tolower(line[i])
+				if (!done && low ~ ("^[ \t]*" key "[ \t]*=")) {
+					match(line[i], "^[ \t]*"); indent = substr(line[i], 1, RLENGTH)
+					print indent key " = " value
+					done = 1
+					continue
+				}
+				print line[i]
+			}
+			if (!done) { print "__NCAM_NG_INSERT__" key " = " value }
+		}' "$NCAM_CONF" > "$tmp"
+
+	if grep -q '^__NCAM_NG_INSERT__' "$tmp"; then
+		# la clave no existía: se mete detrás de la cabecera [webif]
+		grep -v '^__NCAM_NG_INSERT__' "$tmp" > "$tmp.body"
+		awk -v key="$key" -v value="$value" '
+			{ print }
+			/^[ \t]*\[webif\][ \t]*$/ { print key " = " value; inserted = 1 }
+			END { if (!inserted) printf "\n[webif]\n%s = %s\n", key, value }
+		' "$tmp.body" > "$tmp"
+		rm -f "$tmp.body"
+	fi
+
+	if [ "$DRY" = "1" ]; then
+		say "  [dry-run] dejaría en $NCAM_CONF:  $key = $value"
+		rm -f "$tmp"
+		return 0
+	fi
+	cp -p "$NCAM_CONF" "$NCAM_CONF.bak-$(date +%Y%m%d-%H%M%S)"
+	cat "$tmp" > "$NCAM_CONF"
+	rm -f "$tmp"
+}
+
+do_webif_show() {
+	port="$(webif_port)"
+	allowed="$(conf_value httpallowed)"
+	dyndns="$(conf_value httpdyndns)"
+
+	say "WebIf de NCam (puerto $port)"
+	say "==========================="
+	if [ ! -r "$NCAM_CONF" ]; then
+		say "  no encuentro $NCAM_CONF"
+		return 0
+	fi
+	say "  archivo:   $NCAM_CONF"
+	say "  usuario:   $(conf_value httpuser)"
+	if [ -n "$dyndns" ]; then
+		say "  dominios:  $dyndns   (httpdyndns: se resuelven solos)"
+	fi
+	say ""
+	say "  Acceso permitido (httpallowed):"
+	if [ -z "$allowed" ]; then
+		say "    (vacío) -> NADIE puede entrar al WebIf"
+		say "    añade tu IP con:  ncam-ng-ctl webif add TU_IP"
+	else
+		split_list "$allowed" | while IFS= read -r entry; do
+			label=""
+			case "$entry" in
+				any|0.0.0.0-255.255.255.255) label="CUALQUIER IP (abierto a internet)" ;;
+				*)
+					if is_ipv4 "$entry"; then
+						if is_private_ipv4 "$entry"; then label="red local"; else label="IP pública / VPN"; fi
+					elif is_iprange "$entry"; then
+						first=${entry%%-*}
+						if is_private_ipv4 "$first"; then label="red local (rango)"; else label="rango público / VPN"; fi
+					fi
+					;;
+			esac
+			say "    - $entry${label:+   [$label]}"
+		done
+	fi
+
+	say ""
+	say "  Entrar desde otra máquina:  http://<esa-ip-o-dominio>:$port"
+	if [ "$(id -u)" = "0" ] && command -v ufw >/dev/null 2>&1; then
+		case "$(ufw status 2>/dev/null | head -n 1 || true)" in
+			*activo*|*active*)
+				say "  cortafuegos ufw: activo"
+				if ufw status 2>/dev/null | grep -qE "^$port(/tcp)?\b"; then
+					ufw status 2>/dev/null | grep -E "^$port(/tcp)?\b" | sed 's/^/    /'
+				else
+					say "    (sin ninguna regla para el puerto $port: ábrelo si entras desde fuera)"
+				fi
+				;;
+		esac
+	fi
+	say ""
+	say "  La IP permitida es la de QUIEN se conecta, tal como la ve este servidor:"
+	say "  si navegas desde tu PC por la VPN, hay que permitir la IP de tu PC."
+	return 0
+}
+
+do_webif_edit() {
+	[ -r "$NCAM_CONF" ] || die "no encuentro $NCAM_CONF (¿está instalado el paquete ncam-ng?)"
+	op="$1"; shift
+	[ $# -gt 0 ] || die "indica qué IP, rango o dominio:  ncam-ng-ctl webif $op 191.103.121.243"
+
+	allowed="$(conf_value httpallowed)"
+	dyndns="$(conf_value httpdyndns)"
+	dyndns_touched=0
+	if [ -z "$allowed" ] && [ "$op" = "add" ]; then
+		allowed="127.0.0.1"
+		say "aviso: no había ninguna línea httpallowed; se parte de 127.0.0.1 (acceso local)"
+	fi
+
+	for item in "$@"; do
+		case "$item" in
+			any|todas|all)
+				item="0.0.0.0-255.255.255.255"
+				say "AVISO: 'any' deja el WebIf abierto a CUALQUIER IP de internet"
+				;;
+		esac
+
+		if is_ipv4 "$item" || is_iprange "$item"; then
+			new_list="$(add_or_remove "$allowed" "$item" "$op")"
+			if [ "$new_list" = "$allowed" ]; then
+				if [ "$op" = "add" ]; then say "  $item: ya estaba permitido"; else say "  $item: no estaba en la lista"; fi
+			elif [ "$op" = "add" ]; then
+				say "  $item: se permite el acceso"
+			else
+				say "  $item: se quita el acceso"
+			fi
+			allowed="$new_list"
+		elif is_hostname "$item" && ! looks_like_ip "$item" && [ "$op" = "add" ]; then
+			new_list="$(add_or_remove "$dyndns" "$item" add)"
+			count="$(split_list "$new_list" | grep -c . || true)"
+			if [ "$count" -gt 3 ]; then
+				new_list="$(split_list "$new_list" | head -n 3 | paste -sd, -)"
+				say "  $item: se añade a httpdyndns (máx. 3 dominios; la lista se recorta)"
+			else
+				say "  $item: se añade a httpdyndns (se resuelve solo al conectar)"
+			fi
+			dyndns="$new_list"
+			dyndns_touched=1
+		else
+			die "'$item' no es una IP válida (191.103.121.243), un rango (10.0.0.0-10.0.0.255) ni un dominio (micasa.dyndns.org)"
+		fi
+	done
+
+	conf_set httpallowed "$allowed"
+	if [ "$dyndns_touched" = "1" ] || { [ "$op" = "del" ] && [ -n "$dyndns" ]; }; then
+		conf_set httpdyndns "$dyndns"
+	fi
+
+	[ "$DRY" = "1" ] && return 0
+	say ""
+	say "  acceso permitido: $allowed"
+	if [ -n "$dyndns" ]; then
+		say "  dominios:         $dyndns"
+	fi
+	say "  copia de seguridad: ${NCAM_CONF}.bak-*"
+
+	if [ "$NO_RESTART" = "1" ]; then
+		say ""
+		say "  (sin reiniciar todavía: aplícalo con  ncam-ng-ctl restart ncam)"
+		return 0
+	fi
+	say ""
+	say "==> reiniciando $NCAM_SERVICE para aplicar el cambio"
+	run systemctl restart "$NCAM_SERVICE"
+	if wait_active "$NCAM_SERVICE" 15; then
+		port="$(webif_port)"
+		code="$(http_code_retry "http://127.0.0.1:$port/" 10 || true)"
+		say "    ok: $NCAM_SERVICE activo (WebIf HTTP ${code:-000})"
+		for entry in $(split_list "$allowed"); do
+			case "$entry" in
+				*[!0-9.]*) continue ;;   # rangos y dominios: no se listan aquí
+			esac
+			if is_private_ipv4 "$entry"; then
+				continue
+			fi
+			say "    desde ese equipo:  http://$entry:$port"
+		done
+	else
+		say "    AVISO: $NCAM_SERVICE no arrancó; últimos errores:"
+		journalctl -u "$NCAM_SERVICE" -n 15 --no-pager 2>/dev/null | sed 's/^/    /' || true
+		return 1
+	fi
+	return 0
 }
 
 # ---------------------------------------------------------------------------
@@ -322,6 +623,18 @@ do_status() {
 	say "====="
 	say "  configuración del daemon: $NCAM_CONF"
 	say "  configuración del panel:  $PANEL_ENV"
+	allowed="$(conf_value httpallowed)"
+	dyndns="$(conf_value httpdyndns)"
+	if [ -z "$allowed" ]; then
+		say "  acceso al WebIf:          (vacío: no entra nadie; ncam-ng-ctl webif add TU_IP)"
+	else
+		if [ "${#allowed}" -gt 78 ]; then
+			allowed="$(printf '%s' "$allowed" | cut -c1-75)..."
+		fi
+		say "  acceso al WebIf:          $allowed"
+		[ -n "$dyndns" ] && say "  dominios (httpdyndns):    $dyndns"
+		say "                            (ncam-ng-ctl webif para verlo o añadir tu IP)"
+	fi
 	say "  registros:                ncam-ng-ctl logs [ncam|panel] -f"
 	return 0
 }
@@ -423,5 +736,12 @@ case "$ACTION" in
 	config)  do_config ;;
 	passwd)  do_passwd ;;
 	version) do_version ;;
+	webif)
+		case "$WEBIF_OP" in
+			add)  do_webif_edit add $WEBIF_ITEMS ;;
+			del)  do_webif_edit del $WEBIF_ITEMS ;;
+			*)    do_webif_show ;;
+		esac
+		;;
 	*)       usage; exit 2 ;;
 esac

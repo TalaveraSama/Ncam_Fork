@@ -1,5 +1,44 @@
 # Changelog
 
+## [2.4.0] - 2026-10-06 — acceso al WebIf desde tu IP pública o VPN
+
+* Nuevo comando para no editar `ncam.conf` a mano:
+
+  ```bash
+  ncam-ng-ctl webif                              # quién puede entrar y su tipo
+  ncam-ng-ctl webif add 191.103.121.243          # permite esa IP (y reinicia)
+  ncam-ng-ctl webif add 10.0.0.0-10.0.0.255      # permite un rango
+  ncam-ng-ctl webif add micasa.dyndns.org        # dominio (httpdyndns, se resuelve solo)
+  ncam-ng-ctl webif del 192.6.154.19             # quita el acceso
+  ```
+
+  Escribe la lista en `httpallowed` (y los dominios en `httpdyndns`, máximo 3),
+  deja una **copia de seguridad** del fichero (`ncam.conf.bak-*`), comprueba los
+  datos (una IP mal escrita se rechaza antes de tocar nada), reinicia el daemon y
+  enseña las URL para probar. Con `--dry-run` no toca nada y con `--no-restart`
+  solo edita la configuración.
+* `ncam-ng-ctl status` muestra ahora la lista de acceso del WebIf.
+* Documentado en detalle (con el aviso de que la IP permitida es la de **quien se
+  conecta**, no la del servidor, más el cortafuegos y `httpdyndns` para IPs
+  cambiantes) en [docs/configuracion-optima.md](docs/configuracion-optima.md).
+* Recordatorio útil: el WebIf usa autenticación **Digest**, así que para
+  comprobarlo desde la consola hay que usar `curl --digest -u usuario:clave`.
+  Si la IP no está permitida, el WebIf responde `403 Access denied` y el registro
+  del daemon anota `unauthorized access from <ip> - invalid ip or dyndns`.
+* Documentación revisada para que se pueda **copiar y pegar sin sorpresas**:
+  * NCam solo ignora las líneas que **empiezan** por `#` (así lo hace
+    `ncam-config-global.c`): un `#` o `;` detrás de un valor se toma como parte
+    del valor. Todos los ejemplos de las guías llevan ya los comentarios en su
+    propia línea, y se explica por qué (con la prueba de `logfile = /tmp/x.log # hola`).
+  * `panel/README.md` usaba `http_port` (no existe: la clave es `httpport`) y un
+    `httplocale = 1` que no es un idioma válido. Corregido, con `httpallowed`
+    explicado y el atajo `ncam-ng-ctl webif add`.
+  * Los ejemplos de `[cache]` de `README.md` e `INSTALL.md` recomendaban
+    `delay = 120` (120 ms añadidos a cada respuesta de caché); ahora usan
+    `delay = 0`, que es el valor por defecto del daemon y el más rápido.
+  * `examples/ncam.conf` explica en `[webif]` que `httpallowed` son las IPs de
+    quien se conecta y añade el ejemplo comentado de `httpdyndns`.
+
 ## [2.3.0] - 2026-10-06 — configuración óptima y permisos por CAID
 
 ### Configuración óptima para 3 CAID (1801, 1861, 0B00)

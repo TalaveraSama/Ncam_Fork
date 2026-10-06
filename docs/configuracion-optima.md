@@ -71,6 +71,14 @@ sudo restart-ncam
 > `nodeid = 0123456789ABCDEF` y `httppwd = CAMBIA_ESTA_CLAVE`. **Cámbialos
 > todos.** El `nodeid` genéralo con `openssl rand -hex 8` y no lo cambies luego.
 
+> **Los comentarios van en su propia línea.** NCam solo ignora las líneas que
+> **empiezan** por `#` (así lo hace el lector de configuración,
+> `ncam-config-global.c`): si escribes `httpuser = admin   # cámbialo`, el usuario
+> queda literalmente como `admin   # cámbialo` y el WebIf responderá
+> `401 Unauthorized`. Pasa lo mismo con `nodeid`, `httppwd`, los puertos de
+> `[newcamd]` y cualquier ruta. Compruébalo tú mismo: con
+> `logfile = /tmp/x.log # hola` el daemon crea el fichero `/tmp/x.log # hola`.
+
 ---
 
 ## 3. `[global]`: velocidad y balanceo
@@ -123,12 +131,13 @@ En NCPanel lo tienes en *Caché y peers* con histórico.
 **Compartir caché con otros servidores (cacheex)** — opcional, añade al `[cache]`:
 
 ```ini
-cacheexenablestats             = 1                     # contadores por cliente en el WebIf
-cacheex_mode1_delay            = 1801:120,1861:120,0B00:120
-cw_cache_size                  = 8192
-cw_cache_memory                = 8
-ecm_cache_size                 = 8192
-ecm_cache_memory               = 8
+# contadores por cliente en el WebIf
+cacheexenablestats  = 1
+cacheex_mode1_delay = 1801:120,1861:120,0B00:120
+cw_cache_size       = 8192
+cw_cache_memory     = 8
+ecm_cache_size      = 8192
+ecm_cache_memory    = 8
 ```
 
 (`cw_cache_*` y `ecm_cache_*` son la caché de CW/ECM usada para el intercambio con
@@ -144,21 +153,27 @@ sean usuarios de cacheex.
 
 ```ini
 [cccam]
-port            = 12000
-nodeid          = 0123456789ABCDEF   # tuyo, fijo, generado con openssl rand -hex 8
-version         = 2.3.2
-reshare         = 0                  # 0 = tus tarjetas no se reenvían más; súbelo si tus clientes revenden
-stealth         = 1                  # no revelar datos internos del servidor
-keepconnected   = 1                  # evita reconexiones constantes
-updateinterval  = 3600
-autosidblock    = 1                  # marca los SID que no puedes servir (el cliente los ve no disponibles)
+port           = 12000
+# tuyo, fijo, generado con openssl rand -hex 8
+nodeid         = 0123456789ABCDEF
+version        = 2.3.2
+# 0 = tus tarjetas no se reenvían más; súbelo si tus clientes revenden
+reshare        = 0
+# no revelar datos internos del servidor
+stealth        = 1
+# evita reconexiones constantes
+keepconnected  = 1
+updateinterval = 3600
+# marca los SID que no puedes servir (el cliente los ve no disponibles)
+autosidblock   = 1
 ```
 
 ```ini
 [newcamd]
-port            = 50000@1801,1861,0B00   # un solo puerto da los tres CAID
-key             = 0102030405060708091011121314
-mgclient        = 1
+# un solo puerto da los tres CAID
+port     = 50000@1801,1861,0B00
+key      = 0102030405060708091011121314
+mgclient = 1
 ```
 
 Un usuario de CCcam recibiría esto (equivalente a una `C:`):
@@ -200,16 +215,22 @@ protocol         = cccam
 device           = servidor-proveedor.com,12000
 user             = usuario_del_proveedor
 password         = clave_del_proveedor
-cccmaxhops       = 10          # saltos permitidos al pedir por esta línea
+# saltos permitidos al pedir por esta línea
+cccmaxhops       = 10
 cccversion       = 2.3.2
-ccckeepalive     = 1           # mantiene la conexión viva
-cccreconnect     = 30          # reintento si se cae
+# mantiene la conexión viva
+ccckeepalive     = 1
+# reintento si se cae
+cccreconnect     = 30
 caid             = 1801,1861,0B00
 group            = 1
-lb_weight        = 200         # preferida frente a otras del mismo CAID
-audisabled       = 1           # no pedir EMM/AU a una línea de proveedor
+# preferida frente a otras del mismo CAID
+lb_weight        = 200
+# no pedir EMM/AU a una línea de proveedor
+audisabled       = 1
 ecmnotfoundlimit = 0
-dropbadcws       = 0           # no descartar CW "raros" (algunos proveedores)
+# no descartar CW "raros" (algunos proveedores)
+dropbadcws       = 0
 ```
 
 | Línea | Qué hace |
@@ -226,17 +247,18 @@ dropbadcws       = 0           # no descartar CW "raros" (algunos proveedores)
 
 ```ini
 [reader]
-label            = linea-newcamd-3caids
-protocol         = newcamd
-device           = servidor-proveedor.com,50000
-key              = 0102030405060708091011121314
-user             = usuario_del_proveedor
-password         = clave_del_proveedor
-caid             = 1801,1861,0B00
-group            = 2
-lb_weight        = 100
-audisabled       = 1
-inactivitytimeout = 0          # no cerrar la línea por inactividad
+label             = linea-newcamd-3caids
+protocol          = newcamd
+device            = servidor-proveedor.com,50000
+key               = 0102030405060708091011121314
+user              = usuario_del_proveedor
+password          = clave_del_proveedor
+caid              = 1801,1861,0B00
+group             = 2
+lb_weight         = 100
+audisabled        = 1
+# no cerrar la línea por inactividad
+inactivitytimeout = 0
 ```
 
 ### 6.3 Tarjeta local (si la tienes)
@@ -296,12 +318,14 @@ proveedor**: no se gasta un ECM ni se ensucia el ratio de la caché.
 ```ini
 # --- puede ver los TRES CAID ---
 [account]
-user        = cliente_todo
-pwd         = CAMBIA_ESTA_CLAVE_1
+user            = cliente_todo
+pwd             = CAMBIA_ESTA_CLAVE_1
 group           = 1,2
 caid            = 1801,1861,0B00
-cccmaxhops      = 1            # 1 = solo tus tarjetas directas (sube para revendedores)
-max_connections = 1            # conexiones simultáneas de esta cuenta
+# 1 = solo tus tarjetas directas (sube para revendedores)
+cccmaxhops      = 1
+# conexiones simultáneas de esta cuenta
+max_connections = 1
 cccreshare      = 0
 uniq            = 1
 keepalive       = 1
@@ -309,8 +333,8 @@ au              = 0
 
 # --- SOLO el CAID 1801 ---
 [account]
-user        = cliente_solo_1801
-pwd         = CAMBIA_ESTA_CLAVE_2
+user            = cliente_solo_1801
+pwd             = CAMBIA_ESTA_CLAVE_2
 group           = 1,2
 caid            = 1801
 cccmaxhops      = 1
@@ -318,8 +342,8 @@ uniq            = 1
 
 # --- SOLO el CAID 0B00 ---
 [account]
-user        = cliente_solo_0b00
-pwd         = CAMBIA_ESTA_CLAVE_3
+user            = cliente_solo_0b00
+pwd             = CAMBIA_ESTA_CLAVE_3
 group           = 1,2
 caid            = 0B00
 cccmaxhops      = 1
@@ -398,7 +422,7 @@ sudo restart-ncam
 
 # 4. comprueba
 sudo ncam-ng-status                            # servicios y puertos
-curl -s -u admin:TU_CLAVE http://127.0.0.1:8181/ncamapi.json?part=status
+curl -s --digest -u admin:TU_CLAVE http://127.0.0.1:8181/ncamapi.json?part=status
 ```
 
 Con NCPanel: *Ajustes* → **Host público** y puertos → *Líneas* con sus CAID →
@@ -430,9 +454,9 @@ Consultas útiles a mano:
 
 ```bash
 # resumen del motor de caché
-curl -s -u admin:TU_CLAVE "http://127.0.0.1:8181/ncamapi.json?part=cachestats"
+curl -s --digest -u admin:TU_CLAVE "http://127.0.0.1:8181/ncamapi.json?part=cachestats"
 # usuarios y sus ECM
-curl -s -u admin:TU_CLAVE "http://127.0.0.1:8181/ncamapi.json?part=userstats"
+curl -s --digest -u admin:TU_CLAVE "http://127.0.0.1:8181/ncamapi.json?part=userstats"
 ```
 
 ---
@@ -456,37 +480,165 @@ curl -s -u admin:TU_CLAVE "http://127.0.0.1:8181/ncamapi.json?part=userstats"
 ## 11. Valores de referencia rápida
 
 ```ini
-# ncam.conf
+# ncam.conf   (los comentarios, siempre en su propia línea)
 [global]
-nice                = -10
-fallbacktimeout     = 2000
-preferlocalcards    = 1        # 2 solo si NO compartes caché
-dropdups            = 1
-lb_mode             = 1
-lb_nbest_readers    = 2
-disablecrccws       = 1
+nice               = -10
+fallbacktimeout    = 2000
+# 2 solo si NO compartes caché
+preferlocalcards   = 1
+dropdups           = 1
+lb_mode            = 1
+lb_nbest_readers   = 2
+disablecrccws      = 1
 
 [cache]
-delay               = 0        # sin espera al servir desde caché (lo más rápido)
-max_time            = 15       # validez de cada entrada
-max_entries         = 0        # 0 = guardar todo hasta que caduque
-max_hit_time        = 15       # memoria de aciertos de cacheex (0 = off)
-cacheexenablestats  = 0        # 1 solo si compartes caché (contadores por cliente)
+# sin espera al servir desde caché (lo más rápido)
+delay              = 0
+# validez de cada entrada
+max_time           = 15
+# 0 = guardar todo hasta que caduque
+max_entries        = 0
+# memoria de aciertos de cacheex (0 = off)
+max_hit_time       = 15
+# 1 solo si compartes caché (contadores por cliente)
+cacheexenablestats = 0
 ```
 
 ```ini
 # ncam.server  (lector)
-caid                = 1801,1861,0B00
-group               = 1
-audisabled          = 1
-dropbadcws          = 0
+caid       = 1801,1861,0B00
+group      = 1
+audisabled = 1
+dropbadcws = 0
 
 # ncam.user  (permiso)
-caid                = 1801,1861,0B00   # o solo 1801 / solo 0B00
-group               = 1,2
+# o solo 1801 / solo 0B00
+caid       = 1801,1861,0B00
+group      = 1,2
 ```
 
 ---
+
+## 12. Acceso al WebIf: tu IP pública, tu VPN y `httpallowed`
+
+Lo primero que hay que entender, porque es el error que más se comete:
+
+> **`httpallowed` no es la lista de IPs del servidor: es la lista de IPs de quien
+> se conecta.** El daemon mira la dirección **del cliente** que llega al puerto del
+> WebIf y, si no está en la lista (ni en `httpdyndns`), responde
+> `403 Access denied` y anota en el registro
+> `unauthorized access from <ip> - invalid ip or dyndns`.
+
+Así, si el servidor está en un VPS con IP pública `192.6.154.19` y tú navegas
+desde tu casa o tu VPN con IP pública `191.103.121.243`:
+
+| IP | Qué es | ¿Va en `httpallowed`? |
+| --- | --- | --- |
+| `191.103.121.243` | La IP con la que **tú** sales a internet, la que ve el servidor cuando abres el navegador | **Sí, es la importante** |
+| `192.6.154.19` | La IP pública del **propio VPS** | Solo si también navegas *desde* el VPS (consola, túnel, `curl` dentro de la máquina) |
+| `127.0.0.1` | El propio servidor | Conviene dejarla (escritorio remoto, pruebas, NCPanel si va en la misma máquina) |
+| `192.168.0.0-192.168.255.255`, `10.0.0.0-10.255.255.255`, `172.16.0.0-172.31.255.255` | Redes locales (vienen de serie) | Sí, si en tu red hay equipos, y también si tu VPN reparte IPs internas (`10.x`, `172.16-31.x`) |
+
+Ejemplo mínimo para tu caso (una línea, separada por comas, **sin espacios**):
+
+```ini
+[webif]
+httpport    = 8181
+httpuser    = admin
+httppwd     = TU_CLAVE_DEL_WEBIF
+httpallowed = 127.0.0.1,192.168.0.0-192.168.255.255,10.0.0.0-10.255.255.255,172.16.0.0-172.31.255.255,191.103.121.243,192.6.154.19
+```
+
+Todo `httpallowed` va en **una sola línea**, con las comas pegadas a la IP y sin
+comentario al final (los comentarios, siempre en su propia línea: ver §2). Y
+reiniciar el daemon para que lo lea:
+
+```bash
+sudo restart-ncam          # o: sudo systemctl restart ncam
+```
+
+Se comprueba desde el navegador (`http://192.6.154.19:8181`) o desde la consola
+de **tu** equipo, con autenticación **Digest**:
+
+```bash
+curl -s -o /dev/null -w "%{http_code}\n" --digest -u admin:TU_CLAVE \
+     "http://192.6.154.19:8181/ncamapi.json?part=status"
+# 200 = entras · 401 = la IP está permitida pero el usuario/clave no es correcto
+# 403 = tu IP NO está permitida (esto es httpallowed/httpdyndns)
+```
+
+### Hazlo sin tocar el fichero: `ncam-ng-ctl webif`
+
+El paquete `.deb` trae un comando que edita la lista por ti (hace copia de
+seguridad `ncam.conf.bak-AAAAmmdd-HHMMSS`, no duplica entradas y reinicia solo):
+
+```bash
+sudo ncam-ng-ctl webif                                   # quién puede entrar, y de qué tipo es cada IP
+sudo ncam-ng-ctl webif add 191.103.121.243               # permite tu IP pública / de la VPN
+sudo ncam-ng-ctl webif add 192.6.154.19                  # la del VPS (si también navegas desde él)
+sudo ncam-ng-ctl webif add 10.0.0.0-10.0.0.255           # un rango, si tu VPN reparte IPs variables
+sudo ncam-ng-ctl webif add micasa.dyndns.org             # un dominio → va solo a httpdyndns
+sudo ncam-ng-ctl webif del 192.6.154.19                  # quitar una entrada
+sudo ncam-ng-ctl webif add 191.103.121.243 --no-restart  # solo editar, sin reiniciar todavía
+sudo ncam-ng-ctl webif add 191.103.121.243 --dry-run     # ver qué haría, sin tocar nada
+```
+
+`ncam-ng-ctl status` muestra la lista configurada, y con `ncam-ng-ctl webif` sin
+más ves cada entrada etiquetada (*red local*, *IP pública / VPN*, *rango*, *todo
+internet*) para detectar de un vistazo una IP que ya no es la tuya.
+
+### Si tu IP de VPN cambia
+
+`httpallowed` no admite dominios: si la IP del proveedor cambia, o pones el rango
+de la VPN, o usas **`httpdyndns`**, que sí resuelve nombres y **se vuelve a
+resolver en cada conexión** (máximo **3**):
+
+```ini
+[webif]
+httpdyndns  = micasa.dyndns.org,otro.mixto.net
+```
+
+```bash
+sudo ncam-ng-ctl webif add micasa.dyndns.org   # lo pone en httpdyndns automáticamente
+```
+
+### El cortafuegos también decide
+
+Que la IP esté en `httpallowed` no basta si el puerto está cerrado. En Ubuntu con
+`ufw`:
+
+```bash
+sudo ufw status                                                  # ¿aparece 8181?
+sudo ufw allow from 191.103.121.243 to any port 8181 proto tcp   # solo tu IP
+sudo ufw allow from 10.0.0.0/8 to any port 8181 proto tcp        # toda tu red VPN
+```
+
+Y revisa el *port forwarding* del router solo si publicas el puerto a internet;
+**lo más seguro es no publicarlo**: si tienes VPN, entra por la IP interna del
+túnel y deja el 8181 cerrado al exterior.
+
+### Atajo peligroso
+
+```bash
+sudo ncam-ng-ctl webif add any
+```
+
+Permite **cualquier** IP de internet (`0.0.0.0-255.255.255.255`). El comando
+avisa; úsalo solo si lo necesitas de verdad, con una clave del WebIf fuerte y, a
+ser posible, detrás del cortafuegos o de la VPN.
+
+### Diagnóstico rápido del WebIf
+
+| Síntoma | Causa | Solución |
+| --- | --- | --- |
+| `403 Access denied` en el navegador | Tu IP no está permitida | `sudo ncam-ng-ctl webif add TU_IP` y reinicia |
+| Llega a pedir usuario y clave, pero no entra | IP bien, usuario/clave mal | Revisa `httpuser`/`httppwd`; para el super admin del panel, `sudo ncam-ng-ctl passwd` |
+| `curl -u usuario:clave …` devuelve `401` | El WebIf usa **Digest** | Añade `--digest`: `curl --digest -u usuario:clave …` |
+| No conecta nada, ni `403` | Puerto cerrado o IP equivocada en la URL | `ncam-ng-status`, `sudo ufw status`, y comprueba tu IP pública real (`curl ifconfig.me` desde tu equipo) |
+| Aparece `403` después de cambiar de red | Tu IP de VPN cambió | Añade el nuevo rango o un dominio en `httpdyndns` |
+
+---
+
 
 *Ver también: [`cache-engine.md`](cache-engine.md) (cómo funciona el motor de
 caché v2), [`ajustes.md`](ajustes.md) (NCPanel) e [`../INSTALL.md`](../INSTALL.md)

@@ -45,7 +45,8 @@ consulta como acierto o fallo.
 
 ```ini
 [cache]
-max_entries = 200000   ; 0 = ilimitado (comportamiento anterior)
+# 0 = ilimitado (comportamiento anterior)
+max_entries = 200000
 ```
 
 * Se comprueba al crear un **nuevo** contenedor (`find_hash_table()` fallido).

@@ -91,6 +91,79 @@ sh packaging/ncam-ng-ctl.sh --opcion-mala >/dev/null 2>&1 && r=0 || r=$?
 [ "$r" = "2" ] && r=0 || r=1
 check "ncam-ng-ctl: opción desconocida avisa (sin sudo)" "$r"
 
+echo "== acceso al WebIf (ncam-ng-ctl webif) =="
+tmp_webif="$(mktemp -d)"
+cat > "$tmp_webif/ncam.conf" <<'CONF'
+[global]
+nice = -1
+
+[webif]
+httpport = 8181
+httpuser = admin
+httpallowed = 127.0.0.1,192.168.0.0-192.168.255.255
+CONF
+sed "s|^NCAM_CONF=.*|NCAM_CONF=\"$tmp_webif/ncam.conf\"|" packaging/ncam-ng-ctl.sh > "$tmp_webif/ctl"
+chmod +x "$tmp_webif/ctl"
+
+out="$(sh "$tmp_webif/ctl" --dry-run webif add 191.103.121.243 2>&1)"
+if printf '%s' "$out" | grep -q "191.103.121.243"; then r=0; else r=1; fi
+check "webif add: simula la IP que se permite" "$r"
+if grep -q "191.103.121.243" "$tmp_webif/ncam.conf"; then r=1; else r=0; fi
+check "webif add --dry-run no toca la configuración" "$r"
+
+out="$(sh "$tmp_webif/ctl" --no-restart webif add 191.103.121.243 192.6.154.19 2>&1)"
+if grep -q "^httpallowed = 127.0.0.1,192.168.0.0-192.168.255.255,191.103.121.243,192.6.154.19$" "$tmp_webif/ncam.conf"; then r=0; else r=1; fi
+check "webif add: añade las IP al final de httpallowed" "$r"
+if ls "$tmp_webif"/ncam.conf.bak-* >/dev/null 2>&1; then r=0; else r=1; fi
+check "webif add: guarda copia de seguridad" "$r"
+
+out="$(sh "$tmp_webif/ctl" --no-restart webif add 191.103.121.243 2>&1)"
+if printf '%s' "$out" | grep -q "ya estaba permitido"; then r=0; else r=1; fi
+check "webif add: no duplica una IP ya permitida" "$r"
+
+out="$(sh "$tmp_webif/ctl" --no-restart webif add micasa.dyndns.org 2>&1)"
+if grep -q "^httpdyndns = micasa.dyndns.org$" "$tmp_webif/ncam.conf"; then r=0; else r=1; fi
+check "webif add: un dominio va a httpdyndns" "$r"
+
+sh "$tmp_webif/ctl" --no-restart webif del 192.6.154.19 >/dev/null 2>&1
+if grep -q "^httpallowed = 127.0.0.1,192.168.0.0-192.168.255.255,191.103.121.243$" "$tmp_webif/ncam.conf"; then r=0; else r=1; fi
+check "webif del: quita solo esa IP" "$r"
+
+out="$(sh "$tmp_webif/ctl" --no-restart webif 2>&1)"
+if printf '%s' "$out" | grep -q "191.103.121.243" && printf '%s' "$out" | grep -q "IP pública / VPN"; then r=0; else r=1; fi
+check "webif: muestra las IP permitidas y su tipo" "$r"
+
+sh "$tmp_webif/ctl" --no-restart webif add 10.0.0.7 >/dev/null 2>&1
+out="$(sh "$tmp_webif/ctl" --no-restart webif 2>&1)"
+if printf '%s' "$out" | grep -q "10.0.0.7" && printf '%s' "$out" | grep -q "red local"; then r=0; else r=1; fi
+check "webif: distingue una IP de red local" "$r"
+
+sh "$tmp_webif/ctl" --no-restart webif add 999.1.1.1 >/dev/null 2>&1 && r=0 || r=$?
+if [ "$r" != "0" ]; then r=0; else r=1; fi
+check "webif add: rechaza algo que no es IP, rango ni dominio" "$r"
+
+cat > "$tmp_webif/sin.conf" <<'CONF'
+[global]
+nice = -1
+
+[webif]
+httpport = 8181
+CONF
+sed "s|^NCAM_CONF=.*|NCAM_CONF=\"$tmp_webif/sin.conf\"|" packaging/ncam-ng-ctl.sh > "$tmp_webif/ctl2"
+chmod +x "$tmp_webif/ctl2"
+sh "$tmp_webif/ctl2" --no-restart webif add 191.103.121.243 >/dev/null 2>&1
+if grep -q "^httpallowed = 127.0.0.1,191.103.121.243$" "$tmp_webif/sin.conf" && awk '/^\[webif\]/{print NR}' "$tmp_webif/sin.conf" | head -1 | grep -q . ; then
+	section_line=$(awk '/^\[webif\]/{print NR}' "$tmp_webif/sin.conf")
+	http_line=$(awk '/^httpallowed/{print NR}' "$tmp_webif/sin.conf")
+	# tiene que quedar dentro de la sección (justo después de la cabecera)
+	[ "$http_line" -gt "$section_line" ] && r=0 || r=1
+else
+	r=1
+fi
+check "webif add: crea httpallowed si no existía (tras [webif])" "$r"
+
+rm -rf "$tmp_webif"
+
 echo "== opciones del instalador =="
 sh devtools/install-deb.sh --help 2>/dev/null | grep -q -- '--list-assets'
 check "el instalador documenta --list-assets" $?

@@ -88,7 +88,7 @@ Notas prácticas:
 
   ```bash
   ncam-ng-ctl status            # estados, puertos y comprobación HTTP
-  curl -s -u USUARIO:CLAVE http://127.0.0.1:8181/ncamapi.json?part=status
+  curl -s --digest -u USUARIO:CLAVE http://127.0.0.1:8181/ncamapi.json?part=status
   ```
 
 * **Recomendado:** crea una cuenta WebIf solo de lectura para el panel (el panel
@@ -323,7 +323,7 @@ de los avisos.
 
 | Síntoma | Causa y solución |
 | --- | --- |
-| «Caché no accesible» / `ncam_reachable: false` | URL o credenciales del WebIf mal, o el daemon parado. Prueba `ncam-ng-ctl status` y `curl -u usuario:clave http://127.0.0.1:8181/ncamapi.json?part=status`. |
+| «Caché no accesible» / `ncam_reachable: false` | URL o credenciales del WebIf mal, o el daemon parado. Prueba `ncam-ng-ctl status` y `curl --digest -u usuario:clave http://127.0.0.1:8181/ncamapi.json?part=status`. |
 | Guardé los límites de caché y el daemon no cambia | Son la plantilla de `ncam.conf`: exporta el bloque, cópialo en `/etc/ncam/ncam.conf` y `sudo restart-ncam`. |
 | Los avisos no llegan | Revisa que `notify.enabled` = `1` **y** el canal = `1`; usa *Probar*; mira el historial (ahí está el error del SMTP/Telegram). Gmail necesita contraseña de aplicación y puerto 587. |
 | El consumo de ECM no sube | La línea tiene que existir en el daemon (exportada y recargada) y haber servido ECM con OK. Pulsa *Medir ahora* en **Consumo de ECM** y mira si `ecm_ok` aparece en el WebIf (`userstats`). |
