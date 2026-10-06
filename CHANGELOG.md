@@ -79,6 +79,17 @@
   `purge` borra los datos del panel).
 * `ncam-ng-panel-setup` (dentro del paquete): crea o repara el entorno virtual y
   las dependencias del panel, sin conexión si hay ruedas y con PyPI si no.
+* Instalación verificada de punta a punta en un sistema con systemd: los dos
+  servicios quedan activos y habilitados al arranque, el panel responde y lee el
+  motor de caché del daemon, y el ciclo de purga/reinstalación deja los datos
+  intactos. Fruto de esas pruebas se corrigieron los permisos del entorno virtual
+  (el usuario `ncam-panel` no podía ejecutarlo y el servicio no arrancaba), el
+  propietario de la base de datos, el re-lanzamiento con `sudo` del instalador
+  (perdía las opciones) y la reinstalación de la misma versión.
+* La dependencia `libc6` se calcula del propio binario (`objdump`) en lugar de
+  fijarla a mano, y la release se compila en Ubuntu 22.04 con la configuración
+  por defecto de `config.sh` (SoftCam.Key integrado incluido), de modo que los
+  `.deb` funcionan en Ubuntu 22.04/24.04 y Debian 12/13.
 * Nuevo workflow [`.github/workflows/release.yml`](.github/workflows/release.yml):
   al empujar una etiqueta `v*` compila el daemon en un runner de GitHub, ejecuta
   las pruebas del motor de caché y del panel, construye ambos `.deb`, genera

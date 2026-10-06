@@ -138,7 +138,9 @@ curl -fsSL -o install-deb.sh \
 sudo sh install-deb.sh          # deja los servicios ncam y ncam-panel activos
 ```
 
-Tras instalarlos, `sudo ncam-ng-install-deb` actualiza a la última release.
+Los paquetes se compilan en Ubuntu 22.04 (funcionan en Ubuntu 22.04/24.04 y
+Debian 12/13). Tras instalarlos, `sudo ncam-ng-install-deb` actualiza (o repara)
+la instalación con la última release.
 ¿Prefieres construir los paquetes tú mismo? `devtools/build-deb.sh --with-wheels`
 genera los `.deb` en `dist/`, y el workflow
 [`.github/workflows/release.yml`](.github/workflows/release.yml) los publica al

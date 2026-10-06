@@ -53,7 +53,12 @@ sudo sh install-deb.sh
 ```
 
 El instalador descarga los `.deb` de la última release, **comprueba su SHA-256**
-y los instala con `apt`:
+y los instala con `apt`. Volver a ejecutarlo reinstala y repara la instalación
+aunque sea la misma versión (configuración y datos se conservan).
+
+Los paquetes se compilan en Ubuntu 22.04 para que funcionen en el mayor número
+de sistemas: **Ubuntu 22.04/24.04 y Debian 12/13** (necesitan `glibc >= 2.34`,
+que se declara como dependencia del paquete).
 
 | Paquete | Instala | Servicio systemd |
 | --- | --- | --- |

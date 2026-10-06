@@ -63,6 +63,12 @@ if [ -z "$binary" ] || [ ! -f "$binary" ]; then
 fi
 say "    binario: $binary"
 
+# versión mínima de glibc que necesita el binario (para el campo Depends)
+glibc_req=$(objdump -T "$binary" 2>/dev/null | grep -o 'GLIBC_[0-9.]*' \
+	| sed 's/^GLIBC_//' | sort -V | tail -n 1)
+[ -n "$glibc_req" ] || glibc_req="2.28"
+say "    requiere glibc >= $glibc_req"
+
 rm -rf "$work"
 mkdir -p "$dist" "$work"
 
@@ -92,7 +98,8 @@ install -m 0755 "$packaging/ncam-ng.prerm"    "$pkg/DEBIAN/prerm"
 install -m 0755 "$packaging/ncam-ng.postrm"   "$pkg/DEBIAN/postrm"
 printf '%s\n' /etc/ncam/ncam.conf > "$pkg/DEBIAN/conffiles"
 
-sed "s/@VERSION@/$VERSION/; s/@ARCH@/$ARCH/; s|@SIZE@|$(du -sk "$pkg" | cut -f1)|; s|@MAINTAINER@|$MAINTAINER|" \
+sed "s/@VERSION@/$VERSION/; s/@ARCH@/$ARCH/; s|@SIZE@|$(du -sk "$pkg" | cut -f1)|; \
+     s|@MAINTAINER@|$MAINTAINER|; s|@GLIBC@|$glibc_req|" \
 	"$packaging/ncam-ng.control.in" > "$pkg/DEBIAN/control"
 
 dpkg-deb --build --root-owner-group "$pkg" "$dist/ncam-ng_${VERSION}_${ARCH}.deb" >/dev/null

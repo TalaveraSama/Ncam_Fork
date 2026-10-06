@@ -20,8 +20,10 @@ permissions:
 
 jobs:
   deb:
+    # Ubuntu 22.04 a propósito: los binarios compilados en 24.04 piden una
+    # glibc más nueva y no arrancarían en Ubuntu 22.04 ni en Debian 12.
     name: Paquetes .deb (amd64)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
       - name: Descargar el código
         uses: actions/checkout@v4
@@ -54,7 +56,9 @@ jobs:
 
       - name: Configurar y compilar
         run: |
-          ./config.sh --disable WITH_SOFTCAM
+          # misma configuración que la guía de instalación (incluye el
+          # SoftCam.Key integrado y el resto de módulos por defecto)
+          ./config.sh
           make -j"$(nproc)"
 
       - name: Comprobar el binario
@@ -94,6 +98,9 @@ jobs:
             |---|---|
             | `ncam-ng_${{ steps.version.outputs.version }}_amd64.deb` | Daemon con el motor de caché v2, `/etc/ncam/ncam.conf` y el servicio systemd `ncam` |
             | `ncam-ng-panel_${{ steps.version.outputs.version }}_amd64.deb` | Panel web (super admin / reseller), servicio systemd `ncam-panel` |
+
+            Compilados en Ubuntu 22.04 (glibc 2.34): funcionan en **Ubuntu 22.04/24.04 y Debian 12/13**.
+            El daemon incluye el motor de caché v2 y la configuración por defecto de `config.sh` (SoftCam.Key integrado).
 
             ## Instalación
 

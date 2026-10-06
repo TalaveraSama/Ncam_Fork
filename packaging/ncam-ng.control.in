@@ -4,7 +4,7 @@ Section: net
 Priority: optional
 Architecture: @ARCH@
 Maintainer: @MAINTAINER@
-Depends: libc6 (>= 2.28)
+Depends: libc6 (>= @GLIBC@)
 Recommends: python3
 Installed-Size: @SIZE@
 Homepage: https://github.com/TalaveraSama/Ncam_Fork
