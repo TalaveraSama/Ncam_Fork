@@ -8,6 +8,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, Query, Request
 
 from .. import db as database
+from ..config import settings
 from ..models import SettingsUpdate
 from ..security import AuthContext, ROLE_RESELLER, ROLE_SUPER_ADMIN, ROLE_USER, client_ip, current_user, get_db, require_super_admin
 from ..services import audit, purge_snapshots, row_to_dict
@@ -62,7 +63,7 @@ def meta(ctx: AuthContext = Depends(current_user)):
     """Información para que el frontend sepa qué puede mostrar."""
     del ctx
     return {
-        "panel_version": "2.0.0",
+        "panel_version": settings.version,
         "roles": [ROLE_SUPER_ADMIN, ROLE_RESELLER, ROLE_USER],
         "protocols": ["cccam", "newcamd", "camd35", "cacheex"],
         "cache_protocols": ["cccam", "camd35", "newcamd", "csp"],

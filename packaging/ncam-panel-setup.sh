@@ -49,13 +49,19 @@ install_deps() {
 	"$VENV/bin/python" -m pip install --quiet --disable-pip-version-check -r "$PANEL_DIR/requirements.txt"
 }
 
+PY_VERSION="$("$VENV/bin/python" -c 'import sys; print("%d.%d" % sys.version_info[:2])')"
+WHEELS_PY=""
+[ -f "$WHEELS/PYTHONS" ] && WHEELS_PY="$(tr '\n' ' ' < "$WHEELS/PYTHONS" | sed 's/ *$//')"
+
 if [ "$ONLINE" = "0" ] && [ -d "$WHEELS" ]; then
+	log "Python $PY_VERSION detectado; el paquete trae dependencias para: ${WHEELS_PY:-?}"
 	log "instalando dependencias sin conexión desde $WHEELS"
 	if "$VENV/bin/python" -m pip install --quiet --disable-pip-version-check \
 			--no-index --find-links "$WHEELS" -r "$PANEL_DIR/requirements.txt"; then
 		:
 	else
-		log "las ruedas incluidas no sirven para este Python; usando PyPI"
+		log "este Python ($PY_VERSION) no está entre los cubiertos sin conexión"
+		log "descargando las dependencias de PyPI (necesita internet)"
 		install_deps
 	fi
 else

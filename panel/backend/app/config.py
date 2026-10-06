@@ -123,6 +123,22 @@ class Settings:
 
     @property
     def version(self) -> str:
+        """Versión del panel.
+
+        Se toma, por orden: la variable ``NCAM_PANEL_VERSION``, el fichero
+        ``VERSION`` que deja el paquete .deb junto al panel y, si no hay nada,
+        la versión de desarrollo. Así `apt`, la API y el frontend coinciden.
+        """
+        from_file = os.environ.get("NCAM_PANEL_VERSION")
+        if from_file:
+            return from_file
+        try:
+            version_file = Path(__file__).resolve().parents[2] / "VERSION"
+            value = version_file.read_text(encoding="utf-8").strip()
+            if value:
+                return value
+        except OSError:
+            pass
         return "2.0.0"
 
 

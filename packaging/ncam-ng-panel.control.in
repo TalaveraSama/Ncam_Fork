@@ -5,7 +5,7 @@ Priority: optional
 Architecture: @ARCH@
 Maintainer: @MAINTAINER@
 Depends: python3 (>= 3.9), python3-venv
-Recommends: ncam-ng, python3-pip
+Recommends: ncam-ng
 Installed-Size: @SIZE@
 Homepage: https://github.com/TalaveraSama/Ncam_Fork
 Description: NCam-NG Panel - panel web de gestion (super admin / reseller)

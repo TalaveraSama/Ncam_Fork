@@ -1,5 +1,36 @@
 # Changelog
 
+## [2.0.1] - 2026-10-06 — paquetes .deb
+
+### Instalación más ligera
+
+* El paquete `ncam-ng-panel` ya no recomienda `python3-pip`. Ese paquete
+  recomienda a su vez `build-essential` y `python3-dev`, así que `apt` instalaba
+  ~280 MB de compiladores y cabeceras que el panel no necesita (el `pip` del
+  entorno virtual lo aporta `python3-venv`, que sí es dependencia). En una
+  instalación limpia el panel añade ahora 0 MB de dependencias extra.
+
+### Dependencias de Python sin conexión, para todas las versiones soportadas
+
+* El paquete incluye las dependencias en ruedas (`--with-wheels`) para **Python
+  3.10, 3.11 y 3.12**, que son las de Ubuntu 22.04, Debian 12 y Ubuntu 24.04.
+  Antes solo se incluían las de la versión con la que se construía el paquete
+  (3.10 en el CI), así que en Ubuntu 24.04 (3.12) la instalación sin conexión
+  fallaba con `Could not find a version that satisfies the requirement
+  httptools>=0.8.0` y tenía que recurrir a PyPI. Ahora `ncam-ng-panel-setup`
+  instala desde el propio paquete y, si la versión de Python no está cubierta,
+  lo dice claramente antes de usar PyPI.
+* `devtools/build-deb.sh --wheels-python "3.10 3.12"` permite elegir qué
+  versiones se empaquetan para instalar sin conexión.
+
+### Coherencia de versiones
+
+* El panel informa la versión del paquete instalado: `ncam-ng-panel` deja un
+  fichero `VERSION` y `GET /api/v1/health` (y `GET /api/v1/admin/meta`) lo
+  devuelven, en lugar de la versión fija del código.
+* El `postinst` pasa la ruta de las ruedas al instalador del entorno, de forma
+  que las pruebas con `PKGROOT` ejercitan la misma ruta que una instalación real.
+
 ## [2.0.0] - 2026-10-05 — NCam-NG
 
 ### Motor de caché v2 (`ncam-cache.c`, `ncam-cache.h`)

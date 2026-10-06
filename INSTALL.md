@@ -102,9 +102,10 @@ Detalles que conviene saber:
   integrado vacío (cada usuario pone el suyo); si prefieres que las claves vayan
   dentro del binario, coloca el fichero `SoftCam.Key` en la raíz del repositorio
   antes de compilar.
-* El panel incluye las dependencias de Python en el propio paquete: si tu
-  versión de Python coincide, se instalan sin conexión; si no, se bajan de PyPI.
-  Se puede repetir a mano con `sudo ncam-ng-panel-setup [--online]`.
+* El panel incluye las dependencias de Python en el propio paquete para
+  **Python 3.10, 3.11 y 3.12** (Ubuntu 22.04/24.04 y Debian 12): se instalan sin
+  conexión. En otras versiones el instalador lo avisa y usa PyPI. Se puede
+  repetir a mano con `sudo ncam-ng-panel-setup [--online]`.
 * Para **actualizar** más adelante basta con repetir el instalador
   (`sudo ncam-ng-install-deb`): la configuración y la base de datos se conservan
   (`--force-confold`).

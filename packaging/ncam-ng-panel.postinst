@@ -75,8 +75,11 @@ if [ -z "$ROOT" ]; then
 fi
 
 # 5. dependencias de Python (entorno virtual)
+# Se pasa la ruta de las ruedas para que también sea correcta al probar el
+# paquete con PKGROOT (en una instalación normal es /usr/lib/ncam-ng-panel/wheels)
+WHEELS_DIR="$ROOT/usr/lib/ncam-ng-panel/wheels"
 if [ -x "$PANEL_DIR/setup-install.sh" ]; then
-	if ! PANEL_DIR="${PANEL_DIR%/}" sh "$PANEL_DIR/setup-install.sh"; then
+	if ! PANEL_DIR="${PANEL_DIR%/}" WHEELS="$WHEELS_DIR" sh "$PANEL_DIR/setup-install.sh"; then
 		log "AVISO: no se pudieron preparar las dependencias."
 		log "       ejecuta a mano:  sudo ncam-ng-panel-setup --online"
 	fi

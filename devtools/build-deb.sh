@@ -6,6 +6,7 @@
 #   devtools/build-deb.sh --version 2.1.0    # otra versión
 #   devtools/build-deb.sh --no-build         # usa el binario ya compilado
 #   devtools/build-deb.sh --with-wheels      # incluye las dependencias de Python
+#   devtools/build-deb.sh --wheels-python "3.10 3.12"   # versiones cubiertas sin conexión
 #   devtools/build-deb.sh --arch amd64
 #
 # Resultado en dist/:
@@ -14,10 +15,11 @@
 # ---------------------------------------------------------------------------
 set -e
 
-VERSION="2.0.0"
+VERSION="2.0.1"
 ARCH="$(dpkg --print-architecture 2>/dev/null || echo amd64)"
 DO_BUILD=1
 WITH_WHEELS=0
+WHEELS_PYTHONS="3.10 3.11 3.12"
 MAINTAINER="TalaveraSama <108017945+TalaveraSama@users.noreply.github.com>"
 
 while [ $# -gt 0 ]; do
@@ -26,6 +28,7 @@ while [ $# -gt 0 ]; do
 		--arch)        ARCH="${2:?falta la arquitectura}"; shift 2 ;;
 		--no-build)    DO_BUILD=0; shift ;;
 		--with-wheels) WITH_WHEELS=1; shift ;;
+		--wheels-python) WHEELS_PYTHONS="${2:?falta la lista de versiones}"; shift 2 ;;
 		-h|--help)
 			awk 'NR==1{next} /^#/{sub(/^# ?/,""); print; next} {exit}' "$0"
 			exit 0
@@ -121,6 +124,7 @@ find "$pkg/opt/ncam-ng-panel" -name '__pycache__' -type d -prune -exec rm -rf {}
 find "$pkg/opt/ncam-ng-panel" -name '*.pyc' -delete 2>/dev/null || true
 rm -rf "$pkg/opt/ncam-ng-panel/backend/data" "$pkg/opt/ncam-ng-panel/.venv" "$pkg/opt/ncam-ng-panel/.env" 2>/dev/null || true
 
+printf '%s\n' "$VERSION" > "$pkg/opt/ncam-ng-panel/VERSION"
 install -m 0644 "$packaging/ncam-panel.service" "$pkg/lib/systemd/system/ncam-panel.service"
 install -m 0755 "$packaging/ncam-panel-setup.sh" "$pkg/usr/bin/ncam-ng-panel-setup"
 install -m 0755 "$packaging/ncam-panel-setup.sh" "$pkg/opt/ncam-ng-panel/setup-install.sh"
@@ -129,14 +133,28 @@ install_doc INSTALL.md      "$pkg/usr/share/doc/ncam-ng-panel/INSTALL.md"
 install_doc CHANGELOG.md    "$pkg/usr/share/doc/ncam-ng-panel/CHANGELOG.md"
 
 if [ "$WITH_WHEELS" = "1" ]; then
-	say "    descargando dependencias de Python (ruedas)"
-	mkdir -p "$pkg/usr/lib/ncam-ng-panel/wheels"
-	if python3 -m pip download -q --only-binary=:all: -r panel/requirements.txt \
-			-d "$pkg/usr/lib/ncam-ng-panel/wheels"; then
-		say "    ruedas incluidas: $(du -sh "$pkg/usr/lib/ncam-ng-panel/wheels" | cut -f1)"
+	# Las ruedas con código compilado (httptools, uvloop, pydantic-core…) son
+	# específicas de cada versión de Python, así que se descargan para todas las
+	# versiones soportadas: Ubuntu 22.04 (3.10), Debian 12 (3.11), Ubuntu 24.04
+	# (3.12). En otras versiones el instalador usa PyPI automáticamente.
+	wheels_dir="$pkg/usr/lib/ncam-ng-panel/wheels"
+	mkdir -p "$wheels_dir"
+	say "    descargando dependencias de Python para: $WHEELS_PYTHONS"
+	have=0
+	for pyver in $WHEELS_PYTHONS; do
+		if python3 -m pip download -q --only-binary=:all: --python-version "$pyver" \
+				-r panel/requirements.txt -d "$wheels_dir"; then
+			have=1
+		else
+			echo "    aviso: sin ruedas para Python $pyver (usará PyPI)" >&2
+		fi
+	done
+	if [ "$have" = "1" ]; then
+		printf '%s\n' "$WHEELS_PYTHONS" > "$wheels_dir/PYTHONS"
+		say "    ruedas incluidas: $(du -sh "$wheels_dir" | cut -f1) ($(ls "$wheels_dir" | wc -l) ficheros)"
 	else
 		echo "    aviso: no se pudieron descargar las ruedas; el panel usará PyPI" >&2
-		rm -rf "$pkg/usr/lib/ncam-ng-panel/wheels"
+		rm -rf "$wheels_dir"
 	fi
 fi
 
