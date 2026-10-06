@@ -95,6 +95,16 @@
   las pruebas del motor de caché y del panel, construye ambos `.deb`, genera
   `SHA256SUMS` y publica la release en este repositorio con los paquetes y el
   instalador adjuntos.
+* Corregido un fallo del instalador que impedía usarlo en un sistema limpio
+  («Maximum function recursion depth reached» y después «la release no trae el
+  paquete ncam-ng»): al analizar los adjuntos de la release, la función de la
+  tabla se llamaba a sí misma. Además, `--release <etiqueta>` consultaba un
+  endpoint equivocado de la API (`/releases/<etiqueta>` en vez de
+  `/releases/tags/<etiqueta>`) y los patrones de búsqueda generaban avisos de
+  `awk`. Nueva prueba `devtools/run-install-tests.sh` (18 comprobaciones, en el
+  CI) que detecta funciones recursivas, valida la sintaxis y comprueba que el
+  instalador localiza los paquetes de una release real; nueva opción
+  `--list-assets` para diagnosticar.
 * `app.seed --reset-password`: genera una contraseña nueva para un usuario
   existente (útil para recuperar el acceso al panel si se perdió la del super
   administrador impresa durante la instalación).

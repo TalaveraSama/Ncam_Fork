@@ -54,6 +54,9 @@ jobs:
           /tmp/testsenv/bin/pip install -q -r panel/requirements.txt httpx pytest
           cd panel/backend && /tmp/testsenv/bin/python -m pytest -q
 
+      - name: Comprobaciones de los instaladores
+        run: sh devtools/run-install-tests.sh
+
       - name: Configurar y compilar
         run: |
           # ojo: "./config.sh" sin argumentos imprime la ayuda y termina con

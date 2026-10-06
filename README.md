@@ -208,6 +208,7 @@ documentación de configuración clásica.
 ```bash
 devtools/run-cache-test.sh                        # motor de caché (C): 37 comprobaciones
 cd panel/backend && python3 -m pytest             # API del panel (Python): 64 pruebas
+devtools/run-install-tests.sh                     # instaladores (sh): 18 comprobaciones
 ```
 
 ## 6. Aviso legal

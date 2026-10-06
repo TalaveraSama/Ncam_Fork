@@ -459,4 +459,9 @@ Para probar el panel **sin daemon**: `python3 panel/tools/mock_ncam_webif.py
 ```bash
 devtools/run-cache-test.sh                 # motor de caché en C: 37 comprobaciones
 cd panel/backend && python3 -m pytest      # panel: 64 pruebas
+devtools/run-install-tests.sh              # instaladores: 18 comprobaciones
 ```
+
+Si algo va mal con una release, `ncam-ng-install-deb --list-assets` muestra los
+adjuntos que ve el instalador (útil para comprobar que la release tiene los
+paquetes y que hay conexión).

@@ -7,6 +7,7 @@
 #   sudo ncam-ng-install-deb --local dist/      # .deb ya descargados
 #   sudo ncam-ng-install-deb --panel-only       # solo el panel
 #   ncam-ng-install-deb --download-only         # solo descargar (sin root)
+#   ncam-ng-install-deb --list-assets           # ver los adjuntos de la release
 #
 # Repositorio de las releases:
 #   https://github.com/TalaveraSama/Ncam_Fork/releases
@@ -23,11 +24,12 @@ DL_ONLY=0
 DL_DIR=""
 ASSUME_YES=0
 KEEP=0
+LIST_ASSETS=0
 
 ARCH="$(dpkg --print-architecture 2>/dev/null || dpkg-architecture -qDEB_HOST_ARCH 2>/dev/null || echo amd64)"
 
 usage() {
-	asset_table | awk 'NR==1{next} /^#/{sub(/^# ?/,""); print; next} {exit}' "$0"
+	awk 'NR==1{next} /^#/{sub(/^# ?/,""); print; next} {exit}' "$0"
 }
 
 say() { printf '%s\n' "$*"; }
@@ -48,7 +50,27 @@ self_path() {   # ruta absoluta de este script (para poder re-ejecutarlo con sud
 }
 
 # ---------------------------------------------------------------------------
-# 0. permisos
+# 0. validación de las opciones
+#
+# Se hace ANTES de pedir sudo: así una errata (--relase) avisa al momento en
+# lugar de lanzar una petición de contraseña y un error confuso.
+# ---------------------------------------------------------------------------
+validate_args() {
+	while [ $# -gt 0 ]; do
+		case "$1" in
+			--release|--local|--repo|--arch|--dir)
+				[ -n "$2" ] || { echo "error: $1 necesita un valor (usa --help)" >&2; exit 2; }
+				shift 2 ;;
+			--daemon-only|--panel-only|--download-only|--keep|-y|--yes|--list-assets|-h|--help)
+				shift ;;
+			*) echo "opción no reconocida: $1 (usa --help)" >&2; exit 2 ;;
+		esac
+	done
+}
+validate_args "$@"
+
+# ---------------------------------------------------------------------------
+# 0b. permisos
 #
 # El re-lanzamiento con sudo tiene que ocurrir ANTES de leer las opciones: si no,
 # se perderían al ejecutar de nuevo el script.
@@ -56,14 +78,17 @@ self_path() {   # ruta absoluta de este script (para poder re-ejecutarlo con sud
 NEED_ROOT=1
 for arg in "$@"; do
 	case "$arg" in
-		--download-only|-h|--help) NEED_ROOT=0 ;;
+		--download-only|--list-assets|-h|--help) NEED_ROOT=0 ;;
 	esac
 done
 
 if [ "$NEED_ROOT" = "1" ] && [ "$(id -u)" != "0" ]; then
 	if command -v sudo >/dev/null 2>&1; then
 		say "==> se necesitan permisos de root; reintentando con sudo"
-		exec sudo -- sh "$(self_path)" "$@"
+		if sudo -- sh "$(self_path)" "$@"; then
+			exit 0
+		fi
+		die "no se pudo completar con sudo; ejecútalo como root:  sudo sh $(self_path)"
 	else
 		die "ejecuta este instalador como root:  sudo sh $(self_path)"
 	fi
@@ -79,6 +104,7 @@ while [ $# -gt 0 ]; do
 		--daemon-only)   ONLY="daemon"; shift ;;
 		--panel-only)    ONLY="panel"; shift ;;
 		--download-only) DL_ONLY=1; shift ;;
+		--list-assets)   LIST_ASSETS=1; shift ;;
 		--keep)          KEEP=1; shift ;;
 		-y|--yes)        ASSUME_YES=1; shift ;;
 		-h|--help)       usage; exit 0 ;;
@@ -102,9 +128,9 @@ verify_sha256() {   # verify_sha256 <fichero> <nombre>
 	file="$1"; name="$2"
 	[ -f "$DL_DIR/SHA256SUMS" ] || return 0
 	command -v sha256sum >/dev/null 2>&1 || return 0
-	expected=$(asset_table | awk -v n="$name" '$2 == n || $2 == "./" n {print $1}' "$DL_DIR/SHA256SUMS" | head -n 1)
+	expected=$(awk -v n="$name" '$2 == n || $2 == "./" n {print $1}' "$DL_DIR/SHA256SUMS" | head -n 1)
 	[ -n "$expected" ] || return 0
-	actual=$(sha256sum "$file" | asset_table | awk '{print $1}')
+	actual=$(sha256sum "$file" | awk '{print $1}')
 	if [ "$expected" != "$actual" ]; then
 		rm -f "$file"
 		die "la suma SHA-256 de $name no coincide (descarga defectuosa)"
@@ -171,7 +197,7 @@ fetch_sums() {   # descarga SHA256SUMS de la release, si existe
 asset_table() {
 	printf '%s' "$ASSETS" | tr ',' '\n' \
 		| sed -n 's/^[[:space:]]*"\(url\|name\|browser_download_url\)"[[:space:]]*:[[:space:]]*"\([^"]*\)"[[:space:]]*$/\1 \2/p' \
-		| asset_table | awk '
+		| awk '
 			$1 == "url" { api = $2 }
 			$1 == "name" { name = $2 }
 			$1 == "browser_download_url" {
@@ -198,30 +224,49 @@ if [ -n "$LOCAL_DIR" ]; then
 	fi
 else
 	say "==> buscando la release ($RELEASE) en https://github.com/$REPO/releases"
-	API_URL="https://api.github.com/repos/$REPO/releases/$RELEASE"
-	ASSETS="$(curl -fsSL --connect-timeout 20 -H 'Accept: application/vnd.github+json' "$API_URL" 2>/dev/null || true)"
+	API="https://api.github.com/repos/$REPO/releases"
+	if [ "$RELEASE" = "latest" ]; then
+		API_URL="$API/latest"
+	else
+		# por etiqueta (v2.0.0) o por identificador numérico
+		API_URL="$API/tags/$RELEASE"
+	fi
+	fetch_json() {
+		curl -fsSL --connect-timeout 20 -H 'Accept: application/vnd.github+json' "$1" 2>/dev/null || true
+	}
+	ASSETS="$(fetch_json "$API_URL")"
+	if [ -z "$ASSETS" ] && [ "$RELEASE" != "latest" ]; then
+		ASSETS="$(fetch_json "$API/$RELEASE")"   # por si es un id numérico
+	fi
 	[ -n "$ASSETS" ] || die "no pude consultar la API de GitHub ($API_URL).
-       comprueba que la release existe y que hay conexión"
+       comprueba que la release existe (etiqueta $RELEASE) y que hay conexión"
 
 	if [ "$RELEASE" = "latest" ]; then
 		TAG="$(printf '%s' "$ASSETS" | sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n 1)"
 		say "    última release: ${TAG:-?}"
 	fi
 
+	if [ "$LIST_ASSETS" = "1" ]; then
+		say ""
+		say "Adjuntos de la release ${TAG:-$RELEASE}:"
+		asset_table | cut -f1,2 | sed 's/^/  /'
+		exit 0
+	fi
+
 	fetch_sums "$(asset_of 'SHA256SUMS$' | cut -f2)"
 
 	deb_daemon=""; deb_panel=""
 	if [ "$ONLY" != "panel" ]; then
-		line="$(asset_of "ncam-ng_[^/]*_${ARCH}\.deb")"
-		[ -n "$line" ] || line="$(asset_of "ncam-ng_[^/]*\.deb")"
+		line="$(asset_of "ncam-ng_[^/]*_${ARCH}[.]deb")"
+		[ -n "$line" ] || line="$(asset_of "ncam-ng_[^/]*[.]deb")"
 		[ -n "$line" ] || die "la release no trae el paquete ncam-ng para $ARCH"
 		name="$(printf '%s' "$line" | cut -f1)"
 		download_asset "$name" "$(printf '%s' "$line" | cut -f2)" "$(printf '%s' "$line" | cut -f3)"
 		deb_daemon="$DL_DIR/$name"
 	fi
 	if [ "$ONLY" != "daemon" ]; then
-		line="$(asset_of "ncam-ng-panel_[^/]*_${ARCH}\.deb")"
-		[ -n "$line" ] || line="$(asset_of "ncam-ng-panel_[^/]*\.deb")"
+		line="$(asset_of "ncam-ng-panel_[^/]*_${ARCH}[.]deb")"
+		[ -n "$line" ] || line="$(asset_of "ncam-ng-panel_[^/]*[.]deb")"
 		[ -n "$line" ] || die "la release no trae el paquete ncam-ng-panel para $ARCH"
 		name="$(printf '%s' "$line" | cut -f1)"
 		download_asset "$name" "$(printf '%s' "$line" | cut -f2)" "$(printf '%s' "$line" | cut -f3)"
