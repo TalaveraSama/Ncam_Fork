@@ -11,7 +11,7 @@ cd "$(dirname "$0")"
 
 # .env, si existe (sin sobreescribir lo que ya venga del entorno).
 # Se cargan solo las asignaciones "CLAVE=valor" válidas: los comentarios y los
-# valores con espacios (p. ej. NCAM_PANEL_NAME=NCam-NG Panel) no rompen el script.
+# valores con espacios (p. ej. NCAM_PANEL_NAME=NCPanel) no rompen el script.
 if [ -f .env ]; then
 	while IFS= read -r line; do
 		case "$line" in ''|'#'*) continue ;; esac

@@ -1,6 +1,6 @@
 #!/bin/sh
 # ---------------------------------------------------------------------------
-# NCam-NG Panel :: prepara el entorno del panel (instalado por el .deb)
+# NCPanel :: prepara el entorno del panel (instalado por el .deb)
 #
 #   sudo ncam-ng-panel-setup              # crea/actualiza el entorno y las dependencias
 #   sudo ncam-ng-panel-setup --online     # ignora las ruedas incluidas y usa PyPI

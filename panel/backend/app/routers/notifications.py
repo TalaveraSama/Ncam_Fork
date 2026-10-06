@@ -1,4 +1,4 @@
-"""NCam-NG Panel :: avisos de caducidad (email / Telegram)."""
+"""NCPanel :: avisos de caducidad (email / Telegram)."""
 
 from __future__ import annotations
 

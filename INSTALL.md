@@ -9,7 +9,7 @@ instalarlas**:
 | Parte | Qué es | Con paquetes `.deb` | Desde el código |
 | --- | --- | --- | --- |
 | **Daemon NCam-NG** | El servidor de tarjetas/caché en C (motor de caché v2 y WebIf con la página del motor). | `/usr/bin/ncam` + `/etc/ncam/` | `/usr/local/bin` + `/usr/local/etc` |
-| **Panel NCam-NG** | La web de gestión (FastAPI + SQLite) con super admin, reseller, avisos y facturación. | `/opt/ncam-ng-panel` | la carpeta `panel/` |
+| **NCPanel** | La web de gestión (FastAPI + SQLite) con super admin, reseller, avisos y facturación. | `/opt/ncam-ng-panel` | la carpeta `panel/` |
 
 * **Con paquetes `.deb`** (sección A): lo más rápido, sin compilar; los paquetes
   los publica este mismo repositorio en *Releases* y arrancan como servicio.
@@ -63,7 +63,7 @@ que se declara como dependencia del paquete).
 | Paquete | Instala | Servicio systemd |
 | --- | --- | --- |
 | `ncam-ng` | `/usr/bin/ncam`, `/etc/ncam/ncam.conf`, ejemplos en `/usr/share/doc/ncam-ng/examples/` | `ncam` |
-| `ncam-ng-panel` | Panel en `/opt/ncam-ng-panel`, ajustes en `/opt/ncam-ng-panel/.env`, datos en `/var/lib/ncam-ng-panel/panel.db` | `ncam-panel` |
+| `ncam-ng-panel` | **NCPanel** en `/opt/ncam-ng-panel`, ajustes en `/opt/ncam-ng-panel/.env`, datos en `/var/lib/ncam-ng-panel/panel.db` | `ncam-panel` |
 
 Una vez instalado, ese mismo instalador queda en el sistema
 (`/usr/bin/ncam-ng-install-deb`), así que las siguientes veces basta con:
@@ -90,7 +90,7 @@ sudo journalctl -u ncam-panel -f          # si algo no arranca, aquí está el m
 
 Detalles que conviene saber:
 
-* El **super administrador del panel** se crea en la instalación y la contraseña
+* El **super administrador de NCPanel** se crea en la instalación y la contraseña
   se imprime **una sola vez** en la propia salida de `apt`; guárdala. Si la
   pierdes:
   `sudo -u ncam-panel /opt/ncam-ng-panel/.venv/bin/python -m app.seed --username admin --reset-password`
@@ -264,7 +264,7 @@ sudo systemctl status ncam
 
 ---
 
-## C. Panel NCam-NG (desde el código)
+## C. NCPanel (desde el código)
 
 ### 1. Dependencias
 
@@ -358,7 +358,7 @@ aplicación). Si prefieres hacerlo a mano:
 ```ini
 # /etc/systemd/system/ncam-panel.service
 [Unit]
-Description=NCam-NG Panel (API + web de gestión)
+Description=NCPanel (panel web de gestión de NCam-NG)
 After=network-online.target
 Wants=network-online.target
 

@@ -1,5 +1,5 @@
 """
-NCam-NG Panel :: aplicación FastAPI.
+NCPanel :: aplicación FastAPI.
 
 * sirve la API REST bajo ``/api/v1``
 * sirve el frontend SPA (``panel/frontend``) en ``/``
@@ -168,7 +168,8 @@ async def lifespan(app: FastAPI):
         notifier = asyncio.create_task(_expiry_notifier(stop_event))
     biller = asyncio.create_task(_ecm_biller(stop_event))
     log.info(
-        "NCam-NG Panel %s listo en http://%s:%s (NCam WebIf: %s)",
+        "%s %s listo en http://%s:%s (NCam WebIf: %s)",
+        settings.panel_name,
         settings.version,
         settings.host,
         settings.port,
@@ -189,10 +190,11 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="NCam-NG Panel",
+    title="NCPanel",
     description=(
-        "Panel de gestión para NCam con roles de super administrador y revendedor, "
-        "control de líneas, créditos, peers de caché y métricas del motor de caché."
+        "NCPanel: panel de gestión para NCam-NG con roles de super administrador y "
+        "revendedor, control de líneas, créditos, peers de caché y métricas del motor "
+        "de caché."
     ),
     version=settings.version,
     lifespan=lifespan,

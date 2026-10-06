@@ -1,5 +1,5 @@
 """
-NCam-NG Panel :: capa de acceso a datos (SQLite, sin dependencias externas).
+NCPanel :: capa de acceso a datos (SQLite, sin dependencias externas).
 
 Se usa el módulo sqlite3 de la biblioteca estándar con una única conexión por
 petición. El esquema se crea/actualiza de forma idempotente al arrancar.
@@ -245,6 +245,13 @@ def session(db_path: Optional[Path] = None) -> Iterator[sqlite3.Connection]:
         conn.close()
 
 
+# Nombre del panel. Se guarda en los ajustes (panel.name) y lo usan los avisos
+# y el frontend; al renombrar el producto se conserva por compatibilidad la
+# variable de entorno NCAM_PANEL_NAME y el ajuste panel.name de siempre.
+PANEL_DEFAULT_NAME = "NCPanel"
+PANEL_OLD_DEFAULT_NAME = "NCam-NG Panel"
+
+
 def init_db(db_path: Optional[Path] = None) -> None:
     """Crea el esquema si no existe y aplica migraciones sencillas."""
     with _write_lock:
@@ -264,8 +271,23 @@ def init_db(db_path: Optional[Path] = None) -> None:
                     (SCHEMA_VERSION, utcnow()),
                 )
             _ensure_default_settings(conn)
+            _rename_panel_if_default(conn)
         finally:
             conn.close()
+
+
+def _rename_panel_if_default(conn: sqlite3.Connection) -> None:
+    """Renombra el panel en las instalaciones que aún tienen el nombre antiguo.
+
+    Solo se cambia cuando el ajuste conserva el valor por defecto: si alguien lo
+    personalizó (``panel.name``), se respeta.
+    """
+    row = conn.execute("SELECT value FROM settings WHERE key = 'panel.name'").fetchone()
+    if row is not None and row["value"] == PANEL_OLD_DEFAULT_NAME:
+        conn.execute(
+            "UPDATE settings SET value = ? WHERE key = 'panel.name'",
+            (PANEL_DEFAULT_NAME,),
+        )
 
 
 def _migrate(conn: sqlite3.Connection, from_version: int) -> None:
@@ -298,7 +320,7 @@ DEFAULT_SETTINGS = {
     "billing.line_cost": str(settings.line_cost_credits),
     "billing.renew_cost": str(settings.renew_cost_credits),
     "billing.currency": "créditos",
-    "panel.name": "NCam-NG Panel",
+    "panel.name": PANEL_DEFAULT_NAME,
     "panel.ncam_webif_url": settings.ncam_webif_url,
     "panel.ncam_webif_user": settings.ncam_webif_user,
     "panel.ncam_webif_password": settings.ncam_webif_password,

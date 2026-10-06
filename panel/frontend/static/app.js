@@ -1,4 +1,4 @@
-/* NCam-NG Panel :: frontend SPA (JavaScript puro, sin dependencias) */
+/* NCPanel :: frontend SPA (JavaScript puro, sin dependencias) */
 "use strict";
 
 const API = "/api/v1";
@@ -1440,7 +1440,7 @@ function paintUser() {
   $("#user-credits").textContent = state.user.role === "super_admin"
     ? "Créditos ilimitados (administrador)"
     : `Saldo: ${fmtNumber(state.user.credits)} créditos`;
-  $("#brand-sub").textContent = `Panel v2 · ${roleLabels[state.user.role] || ""}`;
+  $("#brand-sub").textContent = `v2 · ${roleLabels[state.user.role] || ""}`;
 }
 
 /* ------------------------------------------------------------------ boot */

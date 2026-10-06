@@ -1,6 +1,6 @@
-# NCam-NG Panel
+# NCPanel
 
-Panel de gestión web para **NCam-NG** con dos roles principales:
+Panel de gestión web (parte del proyecto **NCam-NG**) con dos roles principales:
 **super administrador** (control total) y **reseller** (revendedor con saldo de
 créditos). Incluye además un rol de **usuario final** de solo lectura.
 

@@ -1,4 +1,4 @@
-"""NCam-NG Panel :: rutas de autenticación y sesión."""
+"""NCPanel :: rutas de autenticación y sesión."""
 
 from __future__ import annotations
 

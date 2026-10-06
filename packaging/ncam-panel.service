@@ -1,5 +1,5 @@
 [Unit]
-Description=NCam-NG Panel (API + web de gestión)
+Description=NCPanel (panel web de gestión de NCam-NG)
 Documentation=file:///usr/share/doc/ncam-ng-panel/README.md
 After=network-online.target
 Wants=network-online.target

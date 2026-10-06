@@ -1,5 +1,5 @@
 """
-NCam-NG Panel :: inicialización de datos (seed).
+NCPanel :: inicialización de datos (seed).
 
 Crea el super administrador (si no existe), un reseller de ejemplo y un par de
 líneas/peers de demostración cuando se ejecuta con ``--demo``.

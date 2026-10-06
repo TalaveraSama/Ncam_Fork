@@ -1,5 +1,5 @@
 """
-NCam-NG Panel :: seguridad.
+NCPanel :: seguridad.
 
 Incluye hash de contraseñas (PBKDF2-SHA256), emisión/validación de JWT HS256
 implementada sobre la biblioteca estándar, claves de API para los resellers y

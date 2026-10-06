@@ -1,5 +1,5 @@
 """
-NCam-NG Panel :: facturación por consumo real de ECM.
+NCPanel :: facturación por consumo real de ECM.
 
 El daemon NCam publica en ``/ncamapi.json?part=userstats`` el contador acumulado
 de ECM servidas por cada cuenta (``cwok``). Cada línea del panel corresponde a

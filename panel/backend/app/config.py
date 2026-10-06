@@ -1,5 +1,5 @@
 """
-NCam-NG Panel :: configuración de la aplicación.
+NCPanel :: configuración de la aplicación.
 
 Toda la configuración se toma de variables de entorno (o de un archivo .env
 situado junto al panel) para que el despliegue no requiera tocar el código.
@@ -100,7 +100,7 @@ class Settings:
     ncam_poll_interval: int = _env_int("NCAM_PANEL_CACHE_POLL_INTERVAL", 60)
 
     # --- avisos de caducidad -----------------------------------------------
-    panel_name: str = os.environ.get("NCAM_PANEL_NAME", "NCam-NG Panel")
+    panel_name: str = os.environ.get("NCAM_PANEL_NAME", "NCPanel")
     # el envío periódico se controla con notify.enabled / notify.interval_seconds
     # en los ajustes del panel; esto es solo el valor de arranque del planificador
     notify_enabled: bool = _env_bool("NCAM_PANEL_NOTIFY", True)

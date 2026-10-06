@@ -1,4 +1,4 @@
-"""NCam-NG Panel :: líneas (cuentas que se exportan a NCam)."""
+"""NCPanel :: líneas (cuentas que se exportan a NCam)."""
 
 from __future__ import annotations
 

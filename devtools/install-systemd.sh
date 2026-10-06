@@ -134,7 +134,7 @@ if [ "$DO_PANEL" = "1" ]; then
 
 	write_unit "$UNIT_DIR/ncam-panel.service" <<EOF
 [Unit]
-Description=NCam-NG Panel (API + web de gestión)
+Description=NCPanel (panel web de gestión de NCam-NG)
 Documentation=file://$repo_root/INSTALL.md
 After=network-online.target
 Wants=network-online.target

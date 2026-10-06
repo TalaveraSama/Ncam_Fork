@@ -1,4 +1,4 @@
-"""NCam-NG Panel :: consumo de ECM y su facturación."""
+"""NCPanel :: consumo de ECM y su facturación."""
 
 from __future__ import annotations
 

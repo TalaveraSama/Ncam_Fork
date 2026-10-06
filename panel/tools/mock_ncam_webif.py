@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-NCam-NG Panel :: simulador del WebIf de NCam (solo para desarrollo).
+NCPanel :: simulador del WebIf de NCam (solo para desarrollo).
 
 Sirve el mismo contrato JSON que expone el daemon:
 

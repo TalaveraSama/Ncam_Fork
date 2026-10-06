@@ -1,4 +1,4 @@
-"""NCam-NG Panel :: cuentas (super admin gestiona resellers, reseller sus usuarios)."""
+"""NCPanel :: cuentas (super admin gestiona resellers, reseller sus usuarios)."""
 
 from __future__ import annotations
 

@@ -7,7 +7,7 @@ principales:
 
 1. **Motor de caché v2** dentro del daemon: monitorización completa, límite de
    capacidad con expulsión LRU, API JSON nativa y contadores de rendimiento.
-2. **Panel de gestión web** (`panel/`) con roles de **super administrador** y
+2. **NCPanel**, el panel de gestión web (`panel/`) con roles de **super administrador** y
    **reseller**: líneas, créditos, usuarios finales, peers de caché, auditoría y
    métricas — integrado con el motor de caché del daemon.
 
@@ -74,7 +74,7 @@ devtools/run-cache-test.sh     # no requiere compilar el daemon completo
 
 ---
 
-## 2. Panel de gestión (super admin + reseller)
+## 2. NCPanel: panel de gestión (super admin + reseller)
 
 Ubicado en `panel/`. Se instala en segundos y se conecta al WebIf de NCam para
 leer, en vivo, las métricas del motor de caché.

@@ -1,5 +1,5 @@
 """
-NCam-NG Panel :: lógica de negocio.
+NCPanel :: lógica de negocio.
 
 Reglas implementadas aquí:
 

@@ -1,5 +1,20 @@
 # Changelog
 
+## [2.2.0] - 2026-10-06 — el panel pasa a llamarse NCPanel
+
+* El panel de gestión se llama ahora **NCPanel**: así aparece en la interfaz
+  (título, pantalla de acceso y barra lateral), en la documentación, en la
+  descripción del paquete y del servicio `ncam-panel`, y en los avisos de
+  caducidad (asunto `[NCPanel] …`).
+* El rename se aplica solo a los nombres visibles: **no cambian** el paquete
+  `ncam-ng-panel`, el servicio `ncam-panel`, las rutas (`/opt/ncam-ng-panel`,
+  `/var/lib/ncam-ng-panel`) ni las variables `NCAM_PANEL_*`, para que las
+  actualizaciones sigan funcionando sin tocar nada.
+* Las instalaciones existentes se actualizan solas: al arrancar, la base de datos
+  cambia el ajuste `panel.name` si aún tiene el valor por defecto antiguo (si lo
+  personalizaste, se respeta), y el `postinst` hace lo mismo con
+  `NCAM_PANEL_NAME` en `/opt/ncam-ng-panel/.env`.
+
 ## [2.1.0] - 2026-10-06 — comandos de consola
 
 ### Gestor de servicios `ncam-ng-ctl`

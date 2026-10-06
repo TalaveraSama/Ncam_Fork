@@ -1,5 +1,5 @@
 """
-NCam-NG Panel :: integración con el daemon NCam.
+NCPanel :: integración con el daemon NCam.
 
 * :func:`fetch_cache_stats` lee el endpoint ``/ncamapi.json?part=cachestats``
   añadido en esta versión (motor de caché v2: contadores, hit ratio, capacidad,

@@ -1,4 +1,4 @@
-"""NCam-NG Panel :: esquemas de entrada/salida de la API (Pydantic)."""
+"""NCPanel :: esquemas de entrada/salida de la API (Pydantic)."""
 
 from __future__ import annotations
 

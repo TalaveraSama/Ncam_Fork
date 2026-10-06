@@ -1,4 +1,4 @@
-"""NCam-NG Panel :: estadísticas agregadas."""
+"""NCPanel :: estadísticas agregadas."""
 
 from __future__ import annotations
 

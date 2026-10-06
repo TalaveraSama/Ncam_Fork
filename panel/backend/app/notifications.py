@@ -1,5 +1,5 @@
 """
-NCam-NG Panel :: avisos de caducidad de líneas.
+NCPanel :: avisos de caducidad de líneas.
 
 Envía recordatorios cuando una línea está a punto de expirar, por dos canales
 independientes y sin dependencias externas:

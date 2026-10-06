@@ -1,4 +1,4 @@
-"""NCam-NG Panel :: motor de caché (estadísticas de NCam + peers cacheex)."""
+"""NCPanel :: motor de caché (estadísticas de NCam + peers cacheex)."""
 
 from __future__ import annotations
 

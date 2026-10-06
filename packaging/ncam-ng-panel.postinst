@@ -59,7 +59,7 @@ NCAM_WEBIF_USER=admin
 NCAM_WEBIF_PASSWORD=ncam
 
 # Nombre del panel (aparece en los avisos de caducidad)
-NCAM_PANEL_NAME="NCam-NG Panel"
+NCAM_PANEL_NAME="NCPanel"
 NCAM_PANEL_NOTIFY=1
 EOF
 	chmod 0640 "$ENV_FILE"
@@ -67,6 +67,12 @@ EOF
 	log "configuración creada: $ENV_FILE (secreto aleatorio incluido)"
 else
 	log "configuración conservada: $ENV_FILE"
+	# renombrado del panel: solo se cambia si aún tiene el nombre antiguo por
+	# defecto (si se personalizó, se respeta)
+	if grep -q '^NCAM_PANEL_NAME="NCam-NG Panel"' "$ENV_FILE" 2>/dev/null; then
+		sed -i 's/^NCAM_PANEL_NAME="NCam-NG Panel"/NCAM_PANEL_NAME="NCPanel"/' "$ENV_FILE"
+		log "configuración actualizada: el panel ahora se llama NCPanel"
+	fi
 fi
 
 # 4. permisos de la base de datos (el servicio corre como ncam-panel)

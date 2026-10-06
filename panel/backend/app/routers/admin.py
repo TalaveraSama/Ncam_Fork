@@ -1,4 +1,4 @@
-"""NCam-NG Panel :: ajustes globales, auditoría y metadatos (super admin)."""
+"""NCPanel :: ajustes globales, auditoría y metadatos (super admin)."""
 
 from __future__ import annotations
 
