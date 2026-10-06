@@ -65,12 +65,15 @@ jobs:
           # publican como anotación: así el motivo se ve desde la lista de
           # ejecuciones sin tener que descargar el log completo.
           run_logged() {
+            set +e
             "$@" > /tmp/paso.log 2>&1
             code=$?
+            set -e
             tail -n 5 /tmp/paso.log
             if [ $code -ne 0 ]; then
-              detail=$(tail -n 15 /tmp/paso.log | sed 's/%/%25/g' | tr '\n' '~' | sed 's/~/%0A/g')
-              echo "::error title=Fallo: $1::$detail"
+              resumen=$(grep -iE "error|no such file|undefined" /tmp/paso.log | head -n 5; tail -n 3 /tmp/paso.log)
+              detail=$(printf '%s' "$resumen" | sed 's/%/%25/g' | tr '\n' '~' | sed 's/~/%0A/g')
+              echo "::error title=Fallo ($1)::$detail"
             fi
             return $code
           }
