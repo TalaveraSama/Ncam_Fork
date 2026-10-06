@@ -456,12 +456,53 @@ esquema v4 añade las columnas de avisos y de consumo de ECM).
 Para probar el panel **sin daemon**: `python3 panel/tools/mock_ncam_webif.py
 --port 8181 --users demo_linea` y apunta `panel.ncam_webif_url` a ese puerto.
 
-## F. Pruebas (opcional)
+## F. Comandos rápidos de consola (`ncam-ng-ctl`)
+
+Los paquetes `.deb` instalan un gestor de servicios con atajos, para no tener que
+recordar `systemctl`:
+
+```bash
+restart-ncam              # reinicia el daemon (WebIf + motor de caché)
+restart-ncam-panel        # reinicia el panel web
+ncam-ng-status            # estado de los dos, puertos y comprobación HTTP
+
+ncam-ng-ctl restart       # reinicia los dos servicios
+ncam-ng-ctl restart ncam  # solo el daemon (igual que restart-ncam)
+ncam-ng-ctl restart panel # solo el panel  (igual que restart-ncam-panel)
+ncam-ng-ctl start|stop [ncam|panel]
+ncam-ng-ctl logs ncam -f          # registro del daemon en vivo (panel: ncam-panel)
+ncam-ng-ctl config ncam           # edita /etc/ncam/ncam.conf y avisa de reiniciar
+ncam-ng-ctl config panel          # edita /opt/ncam-ng-panel/.env
+ncam-ng-ctl passwd                # nueva contraseña del super admin (se muestra una vez)
+ncam-ng-ctl version               # versiones instaladas y del binario
+```
+
+Qué usar según lo que cambies:
+
+| Cambias… | Comando |
+| --- | --- |
+| `[webif]`, `[cache]`, `[cccam]`… en `/etc/ncam/ncam.conf` | `restart-ncam` |
+| puerto, WebIf del daemon o avisos en `/opt/ncam-ng-panel/.env` | `restart-ncam-panel` |
+| el binario del daemon (compilación nueva) | `restart-ncam` |
+| no sabes qué pasa | `ncam-ng-status` y `ncam-ng-ctl logs ncam -n 100` |
+
+Notas:
+
+* Los atajos son enlaces al mismo script: funcionan desde cualquier carpeta.
+* `ncam-ng-status` no necesita root; para reiniciar o parar sí (el script se
+  re-ejecuta solo con `sudo` si hace falta).
+* Si prefieres systemd de toda la vida:
+  `sudo systemctl restart ncam` / `sudo systemctl restart ncam-panel`.
+* `--dry-run` muestra lo que haría sin tocar nada (útil para comprobar el destino).
+
+---
+
+## G. Pruebas (opcional)
 
 ```bash
 devtools/run-cache-test.sh                 # motor de caché en C: 37 comprobaciones
 cd panel/backend && python3 -m pytest      # panel: 64 pruebas
-devtools/run-install-tests.sh              # instaladores: 18 comprobaciones
+devtools/run-install-tests.sh              # instaladores y comandos: 27 comprobaciones
 ```
 
 Si algo va mal con una release, `ncam-ng-install-deb --list-assets` muestra los

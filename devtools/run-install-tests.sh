@@ -57,6 +57,40 @@ for script in devtools/install-deb.sh devtools/build-deb.sh; do
 	check "$script: sin funciones recursivas" "$bad"
 done
 
+echo "== gestor de servicios (ncam-ng-ctl) =="
+sh -n packaging/ncam-ng-ctl.sh 2>/dev/null
+check "ncam-ng-ctl: sintaxis válida" $?
+sh packaging/ncam-ng-ctl.sh --help >/dev/null 2>&1
+check "ncam-ng-ctl: --help responde" $?
+out="$(sh packaging/ncam-ng-ctl.sh --dry-run restart ncam 2>&1)"
+if printf '%s' "$out" | grep -q "systemctl restart ncam"; then r=0; else r=1; fi
+check "restart ncam pide reiniciar solo el daemon" "$r"
+out="$(sh packaging/ncam-ng-ctl.sh --dry-run restart panel 2>&1)"
+if printf '%s' "$out" | grep -q "systemctl restart ncam-panel"; then r=0; else r=1; fi
+check "restart panel pide reiniciar solo el panel" "$r"
+out="$(sh packaging/ncam-ng-ctl.sh --dry-run restart 2>&1)"
+if printf '%s' "$out" | grep -q "systemctl restart ncam" && printf '%s' "$out" | grep -q "systemctl restart ncam-panel"; then r=0; else r=1; fi
+check "restart sin destino reinicia los dos" "$r"
+
+# los atajos dependen del nombre con el que se llama al script
+tmp_links="$(mktemp -d)"
+for alias in restart-ncam restart-ncam-panel ncam-ng-status; do
+	ln -sf "$NCAM_ROOT/packaging/ncam-ng-ctl.sh" "$tmp_links/$alias"
+done
+out="$("$tmp_links/restart-ncam" --dry-run 2>&1)"
+if printf '%s' "$out" | grep -q "systemctl restart ncam$"; then r=0; else r=1; fi
+check "atajo restart-ncam" "$r"
+out="$("$tmp_links/restart-ncam-panel" --dry-run 2>&1)"
+if printf '%s' "$out" | grep -q "systemctl restart ncam-panel"; then r=0; else r=1; fi
+check "atajo restart-ncam-panel" "$r"
+"$tmp_links/ncam-ng-status" >/dev/null 2>&1 && r=0 || r=$?
+check "atajo ncam-ng-status funciona sin root" "$r"
+rm -rf "$tmp_links"
+
+sh packaging/ncam-ng-ctl.sh --opcion-mala >/dev/null 2>&1 && r=0 || r=$?
+[ "$r" = "2" ] && r=0 || r=1
+check "ncam-ng-ctl: opción desconocida avisa (sin sudo)" "$r"
+
 echo "== opciones del instalador =="
 sh devtools/install-deb.sh --help 2>/dev/null | grep -q -- '--list-assets'
 check "el instalador documenta --list-assets" $?

@@ -15,7 +15,7 @@
 # ---------------------------------------------------------------------------
 set -e
 
-VERSION="2.0.2"
+VERSION="2.1.0"
 ARCH="$(dpkg --print-architecture 2>/dev/null || echo amd64)"
 DO_BUILD=1
 WITH_WHEELS=0
@@ -86,6 +86,11 @@ mkdir -p "$pkg/DEBIAN" "$pkg/usr/bin" "$pkg/etc/ncam" "$pkg/lib/systemd/system" 
 install -m 0755 "$binary" "$pkg/usr/bin/ncam"
 # el instalador de releases, para poder actualizar con un solo comando
 install -m 0755 "$repo_root/devtools/install-deb.sh" "$pkg/usr/bin/ncam-ng-install-deb"
+# gestor de servicios y atajos de consola (restart-ncam, restart-ncam-panel...)
+install -m 0755 "$packaging/ncam-ng-ctl.sh" "$pkg/usr/bin/ncam-ng-ctl"
+for alias in restart-ncam restart-ncam-panel ncam-ng-status; do
+	ln -sf ncam-ng-ctl "$pkg/usr/bin/$alias"
+done
 install -m 0644 "$packaging/ncam.conf" "$pkg/etc/ncam/ncam.conf"
 install -m 0644 "$packaging/ncam.service" "$pkg/lib/systemd/system/ncam.service"
 

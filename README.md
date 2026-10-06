@@ -142,7 +142,15 @@ sudo sh install-deb.sh          # deja los servicios ncam y ncam-panel activos
 ```
 
 Los paquetes se compilan en Ubuntu 22.04 (funcionan en Ubuntu 22.04/24.04 y
-Debian 12/13). Tras instalarlos, `sudo ncam-ng-install-deb` actualiza (o repara)
+Debian 12/13). Con los paquetes instalados tienes atajos de consola:
+
+```bash
+restart-ncam              # reinicia el daemon (WebIf + motor de caché)
+restart-ncam-panel        # reinicia el panel web
+ncam-ng-status            # estado, puertos y comprobación HTTP
+```
+
+Tras instalarlos, `sudo ncam-ng-install-deb` actualiza (o repara)
 la instalación con la última release.
 ¿Prefieres construir los paquetes tú mismo? `devtools/build-deb.sh --with-wheels`
 genera los `.deb` en `dist/`, y el workflow
@@ -192,6 +200,7 @@ documentación de configuración clásica.
 ├── devtools/run-cache-test.sh
 ├── devtools/build-deb.sh           # construye los paquetes .deb
 ├── devtools/install-deb.sh         # descarga e instala los .deb de una release
+├── packaging/ncam-ng-ctl.sh        # gestor de servicios (restart-ncam, status…)
 ├── packaging/                      # control, servicios systemd y scripts de los .deb
 ├── .github/workflows/release.yml   # compila y publica los .deb al etiquetar v*
 ├── Distribution/doc/example/ncam.conf
@@ -208,7 +217,7 @@ documentación de configuración clásica.
 ```bash
 devtools/run-cache-test.sh                        # motor de caché (C): 37 comprobaciones
 cd panel/backend && python3 -m pytest             # API del panel (Python): 64 pruebas
-devtools/run-install-tests.sh                     # instaladores (sh): 18 comprobaciones
+devtools/run-install-tests.sh                     # instaladores y comandos: 27 comprobaciones
 ```
 
 ## 6. Aviso legal

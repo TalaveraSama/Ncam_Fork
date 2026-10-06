@@ -1,5 +1,34 @@
 # Changelog
 
+## [2.1.0] - 2026-10-06 — comandos de consola
+
+### Gestor de servicios `ncam-ng-ctl`
+
+El paquete del daemon instala ahora `ncam-ng-ctl` y tres atajos (enlaces al mismo
+script), para no tener que recordar `systemctl`:
+
+```bash
+restart-ncam                     # reinicia el daemon
+restart-ncam-panel               # reinicia el panel
+ncam-ng-status                    # estado, puertos y comprobación HTTP
+```
+
+Y el gestor completo:
+
+| Comando | Para qué |
+| --- | --- |
+| `ncam-ng-ctl status` | estado de los dos servicios, puertos (los lee de la configuración real) y comprobación HTTP |
+| `ncam-ng-ctl restart [ncam\|panel]` | reinicia uno o los dos y comprueba que levantan (con reintentos, `health ok`) |
+| `ncam-ng-ctl start` / `stop [ncam\|panel]` | arranca o detiene |
+| `ncam-ng-ctl logs [ncam\|panel] [-f] [-n N]` | registro con journald, en vivo con `-f` |
+| `ncam-ng-ctl config ncam\|panel` | abre la configuración con `$EDITOR` (o nano/vi) y recuerda el reinicio |
+| `ncam-ng-ctl passwd [usuario]` | genera una contraseña nueva del panel (la ejecuta como el usuario del servicio y se muestra una vez) |
+| `ncam-ng-ctl version` | versiones de los paquetes, del panel y del binario |
+
+Detalles: se re-ejecuta solo con `sudo` cuando hace falta (status no), `--dry-run`
+muestra lo que haría, valida las opciones antes de pedir permisos y, si un
+servicio no arranca, enseña las últimas líneas del registro con el motivo.
+
 ## [2.0.2] - 2026-10-06 — paquetes .deb
 
 * El instalador crea su carpeta temporal con permisos de lectura para el usuario
