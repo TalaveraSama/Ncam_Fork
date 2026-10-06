@@ -11,6 +11,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import hmac
+import ipaddress
 import json
 import secrets
 import sqlite3
@@ -318,8 +319,68 @@ def assert_not_locked(username: str, ip: Optional[str]) -> None:
         )
 
 
+# Cabeceras que dejan los proxies con la IP real del cliente, en orden de
+# preferencia. CF-Connecting-IP la escribe Cloudflare y no se puede falsear desde
+# fuera; X-Forwarded-For es una lista y la última entrada la añade el proxy más
+# cercano (el de confianza), así que es la que vale.
+_PROXY_HEADERS = ("cf-connecting-ip", "x-real-ip")
+_MAX_IP_LENGTH = 64
+
+
+def _normalize_ip(value: Optional[str]) -> Optional[str]:
+    """Devuelve la IP normalizada, o None si el texto no es una IP."""
+    if not value:
+        return None
+    value = value.strip()
+    if not value or len(value) > _MAX_IP_LENGTH:
+        return None
+    if value.startswith("[") and "]" in value:          # [::1]:1234
+        value = value[1:value.index("]")]
+    elif value.count(":") == 1 and "." in value:        # 1.2.3.4:1234
+        value = value.split(":")[0]
+    if "%" in value:                                    # fe80::1%eth0
+        value = value.split("%")[0]
+    try:
+        return str(ipaddress.ip_address(value))
+    except ValueError:
+        return None
+
+
+def _trusted_proxy(peer: Optional[str]) -> bool:
+    address = _normalize_ip(peer)
+    if not address:
+        return False
+    for entry in settings.trusted_proxies:
+        try:
+            if ipaddress.ip_address(address) in ipaddress.ip_network(entry, strict=False):
+                return True
+        except ValueError:
+            continue
+    return False
+
+
 def client_ip(request: Request) -> Optional[str]:
+    """IP del cliente, con soporte de proxies de confianza (Cloudflare, nginx…).
+
+    Si la conexión llega directamente (sin proxy), se devuelve la IP del socket y
+    **se ignoran** las cabeceras: así nadie puede falsear lo que se guarda en la
+    auditoría ni esquivar el límite de intentos de login. Si llega desde un proxy
+    de confianza (`NCAM_PANEL_TRUSTED_PROXIES`, por defecto 127.0.0.1 y ::1), se
+    usa la IP que ese proxy informa del cliente real.
+    """
+    peer = request.client.host if request.client else None
+    if not _trusted_proxy(peer):
+        return peer
+
+    for header in _PROXY_HEADERS:
+        address = _normalize_ip(request.headers.get(header))
+        if address:
+            return address
+
     forwarded = request.headers.get("x-forwarded-for")
     if forwarded:
-        return forwarded.split(",")[0].strip()
-    return request.client.host if request.client else None
+        for candidate in reversed(forwarded.split(",")):   # la añade el proxy de confianza
+            address = _normalize_ip(candidate)
+            if address:
+                return address
+    return peer

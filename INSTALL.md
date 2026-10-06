@@ -473,6 +473,8 @@ esquema v4 añade las columnas de avisos y de consumo de ECM).
 | El panel dice *WebIf de NCam no disponible* | Revisa `NCAM_WEBIF_URL`/`panel.ncam_webif_url`, que el daemon esté escuchando (`ss -ltnp | grep 8181`) y que `httpallowed` incluya la IP del panel. |
 | `database is locked` en el log del panel | Dos procesos usando la misma `panel.db`: detén el duplicado o usa otra ruta con `NCAM_PANEL_DB`. |
 | El WebIf no responde en la red local | Ajusta `httpallowed` y `httpport` en `[webif]`, y abre el puerto en el cortafuegos. |
+| Quiero que mis usuarios entren al panel sin ver mi IP | Públicalo con Cloudflare Tunnel (sin abrir puertos) y Access delante: [`docs/panel-sin-exponer-ip.md`](docs/panel-sin-exponer-ip.md). |
+| Detrás del panel hay un proxy y la auditoría muestra `127.0.0.1` | Fija `NCAM_PANEL_TRUSTED_PROXIES=127.0.0.1,::1` en `/opt/ncam-ng-panel/.env` y `restart-ncam-panel`. |
 | Los avisos de caducidad no se envían | Activa `notify.enabled`, el canal (`notify.channel.email` / `notify.channel.telegram`) y rellena `notify.smtp.*` o el token del bot. |
 | La facturación por ECM no cobra | Debe haber **bloques completos** servidos (`billing.ecm.block`), saldo del propietario y las líneas exportadas al daemon como cuentas. |
 | Cierro la terminal y el panel deja de responder | está lanzado a mano: instálalo como servicio con `sudo devtools/install-systemd.sh`. |

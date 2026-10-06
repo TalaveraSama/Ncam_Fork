@@ -166,6 +166,7 @@ jobs:
             docs/ajustes.md
             docs/configuracion-optima.md
             docs/administradores.md
+            docs/panel-sin-exponer-ip.md
             examples/ncam.conf
             examples/ncam.server
             examples/ncam.user

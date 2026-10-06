@@ -85,7 +85,8 @@ Todo esto, con ejemplos y preguntas frecuentes, en
 
 | Variable | Por defecto | Descripción |
 |---|---|---|
-| `NCAM_PANEL_HOST` / `NCAM_PANEL_PORT` | `0.0.0.0` / `8080` | Escucha del panel. |
+| `NCAM_PANEL_HOST` / `NCAM_PANEL_PORT` | `0.0.0.0` / `8080` | Escucha del panel. Detrás de un túnel/proxy, `127.0.0.1` es la opción segura. |
+| `NCAM_PANEL_TRUSTED_PROXIES` | `127.0.0.1,::1` | IPs/rangos de proxy de confianza (cloudflared, nginx, Caddy): con ellos se usa `CF-Connecting-IP`/`X-Forwarded-For` para la auditoría y el bloqueo por intentos. |
 | `NCAM_PANEL_SECRET` | generado en `panel/.secret_key` | Clave de firma de los JWT. |
 | `NCAM_PANEL_DB` | `panel/backend/data/panel.db` (`.deb`: `/var/lib/ncam-ng-panel/panel.db`) | Ruta de SQLite. |
 | `NCAM_WEBIF_URL` | `http://127.0.0.1:8181` | WebIf del daemon NCam. |
@@ -375,4 +376,14 @@ dinámicos, para trabajar en la interfaz sin compilar NCam.
   quedan movimientos de créditos a medias.
 
 > Recomendación de despliegue: ponga el panel detrás de HTTPS (nginx/caddy) y
-> restrinja el acceso al WebIf de NCam a la red interna.
+> restrinja el acceso al WebIf de NCam a la red interna. Para publicarlo a tus
+> usuarios **sin exponer la IP del servidor**, siga
+> [`../docs/panel-sin-exponer-ip.md`](../docs/panel-sin-exponer-ip.md)
+> (Cloudflare Tunnel + Access).
+
+| Proxy delante del panel | Qué poner en `.env` |
+| --- | --- |
+| cloudflared en el mismo servidor | `NCAM_PANEL_HOST=127.0.0.1` y `NCAM_PANEL_TRUSTED_PROXIES=127.0.0.1` |
+| nginx/Caddy en el mismo servidor | `NCAM_PANEL_HOST=127.0.0.1` y `NCAM_PANEL_TRUSTED_PROXIES=127.0.0.1` |
+| proxy en otro equipo | `NCAM_PANEL_TRUSTED_PROXIES` con la IP o el rango CIDR de ese equipo |
+| sin proxy (acceso directo) | No hace falta: las cabeceras de proxy se ignoran, así nadie puede falsear su IP |

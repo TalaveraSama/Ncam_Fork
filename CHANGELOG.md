@@ -1,5 +1,36 @@
 # Changelog
 
+## [2.4.3] - 2026-10-06 — publicar el panel sin exponer tu IP (Cloudflare Tunnel)
+
+* **Guía nueva** [`docs/panel-sin-exponer-ip.md`](docs/panel-sin-exponer-ip.md):
+  cómo publicar NCPanel por un dominio con HTTPS **sin abrir puertos** y sin que la
+  IP del servidor aparezca en el DNS ni en un escaneo, usando Cloudflare Tunnel
+  (gratis), con los dos caminos (túnel con token desde la web y `config.yml`),
+  Cloudflare Access (login extra con MFA, gratis hasta 50 usuarios), cierre de
+  puertos en `ufw`, y comprobaciones (`dig`, `nc`, `ss`) para verificar que la IP
+  está oculta.
+* **Lo que no se puede ocultar, explicado claro:** las líneas de CCcam/Newcamd
+  (puertos 12000/50000) son TCP propio de CAM, y el proxy de Cloudflare solo cubre
+  HTTP/HTTPS (80, 443, 8080, 8443, 2052/2053, 2082/2083, 2086/2087, 2095/2096,
+  8880). El plan gratis no las puede proteger: o relé TCP en otro VPS, o VPN
+  (Tailscale/WireGuard), o Spectrum (Enterprise). También se avisa de que el WebIf
+  del daemon filtra por la IP del socket y no lee `CF-Connecting-IP`, así que
+  detrás de un túnel `httpallowed` deja de distinguir clientes: lo mejor es no
+  publicarlo (SSH) o ponerle Access delante.
+* **Panel: IP real del cliente detrás de un proxy de confianza.** Nueva variable
+  `NCAM_PANEL_TRUSTED_PROXIES` (por defecto `127.0.0.1,::1`, admite rangos CIDR).
+  Solo si la conexión llega desde un proxy de confianza se usan `CF-Connecting-IP`
+  / `X-Forwarded-For` (última entrada) / `X-Real-IP`; así la **auditoría** y el
+  **bloqueo por intentos fallidos** funcionan con la IP real detrás de
+  cloudflared, nginx o Caddy.
+* **Arreglo de seguridad:** `client_ip()` se fiaba de `X-Forwarded-For` viniera de
+  donde viniera, de modo que cualquiera podía falsear su IP en la auditoría y, peor,
+  esquivar el bloqueo por intentos fallidos rotando esa cabecera. Ahora, en
+  conexiones directas, esas cabeceras **se ignoran** y se usa la IP del socket.
+* Pruebas: 22 nuevas del panel (95 en total) que cubren la normalización de IPs, el
+  proxy de confianza (Cloudflare, nginx, rangos CIDR), el rechazo de cabeceras
+  falseadas y que rotar `X-Forwarded-For` no evita el bloqueo por intentos fallidos.
+
 ## [2.4.2] - 2026-10-06 — guía de administradores
 
 * Nueva guía [`docs/administradores.md`](docs/administradores.md): los tres roles

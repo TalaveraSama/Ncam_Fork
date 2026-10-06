@@ -183,7 +183,9 @@ ncam-ng-ctl webif add TU_IP   # permite tu IP (casa/VPN) en el WebIf y reinicia
 > El WebIf solo atiende a las IPs de `httpallowed`/`httpdyndns` (las de **quien se
 > conecta**, no las del servidor) y usa autenticación **Digest**. Cómo dejar entrar
 > tu IP pública o la de tu VPN: §12 de
-> [`docs/configuracion-optima.md`](docs/configuracion-optima.md).
+> [`docs/configuracion-optima.md`](docs/configuracion-optima.md). Y si quieres
+> publicar el panel a tus usuarios **sin exponer tu IP**: 
+> [`docs/panel-sin-exponer-ip.md`](docs/panel-sin-exponer-ip.md) (Cloudflare Tunnel).
 
 Tras instalarlos, `sudo ncam-ng-install-deb` actualiza (o repara)
 la instalación con la última release.

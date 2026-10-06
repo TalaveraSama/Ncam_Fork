@@ -15,7 +15,7 @@
 # ---------------------------------------------------------------------------
 set -e
 
-VERSION="2.4.2"
+VERSION="2.4.3"
 ARCH="$(dpkg --print-architecture 2>/dev/null || echo amd64)"
 DO_BUILD=1
 WITH_WHEELS=0
@@ -105,6 +105,7 @@ install_doc CHANGELOG.md "$pkg/usr/share/doc/ncam-ng/CHANGELOG.md"
 install_doc INSTALL.md   "$pkg/usr/share/doc/ncam-ng/INSTALL.md"
 install_doc docs/configuracion-optima.md "$pkg/usr/share/doc/ncam-ng/configuracion-optima.md"
 install_doc docs/administradores.md      "$pkg/usr/share/doc/ncam-ng/administradores.md"
+install_doc docs/panel-sin-exponer-ip.md "$pkg/usr/share/doc/ncam-ng/panel-sin-exponer-ip.md"
 
 install -m 0755 "$packaging/ncam-ng.postinst" "$pkg/DEBIAN/postinst"
 install -m 0755 "$packaging/ncam-ng.prerm"    "$pkg/DEBIAN/prerm"
@@ -148,6 +149,7 @@ install_doc CHANGELOG.md    "$pkg/usr/share/doc/ncam-ng-panel/CHANGELOG.md"
 install_doc docs/ajustes.md "$pkg/usr/share/doc/ncam-ng-panel/ajustes.md"
 install_doc docs/ajustes.md "$pkg/opt/ncam-ng-panel/docs/ajustes.md"
 install_doc docs/administradores.md "$pkg/opt/ncam-ng-panel/docs/administradores.md"
+install_doc docs/panel-sin-exponer-ip.md "$pkg/opt/ncam-ng-panel/docs/panel-sin-exponer-ip.md"
 
 if [ "$WITH_WHEELS" = "1" ]; then
 	# Las ruedas con código compilado (httptools, uvloop, pydantic-core…) son

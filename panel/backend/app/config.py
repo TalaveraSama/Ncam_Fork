@@ -34,6 +34,12 @@ def _load_dotenv() -> None:
 _load_dotenv()
 
 
+def _env_list(name: str, default: str) -> tuple[str, ...]:
+    """Lista separada por comas (admite IPs y rangos CIDR)."""
+    raw = os.environ.get(name, default)
+    return tuple(item.strip() for item in raw.split(",") if item.strip())
+
+
 def _env_int(name: str, default: int) -> int:
     try:
         return int(os.environ.get(name, default))
@@ -83,6 +89,12 @@ class Settings:
     password_min_length: int = _env_int("NCAM_PANEL_PASSWORD_MIN", 10)
     max_login_attempts: int = _env_int("NCAM_PANEL_MAX_LOGIN_ATTEMPTS", 8)
     login_lockout_seconds: int = _env_int("NCAM_PANEL_LOGIN_LOCKOUT", 300)
+    # Proxies de confianza (IPs o rangos CIDR). Solo si la conexión llega desde
+    # uno de ellos se hace caso a CF-Connecting-IP / X-Forwarded-For / X-Real-IP:
+    # si no, cualquiera podría falsear su IP en la auditoría y saltarse el bloqueo
+    # por intentos fallidos. Por defecto la propia máquina, que es lo que se ve
+    # con cloudflared, nginx, Caddy o el proxy del panel en el mismo servidor.
+    trusted_proxies: tuple[str, ...] = _env_list("NCAM_PANEL_TRUSTED_PROXIES", "127.0.0.1,::1")
 
     # --- base de datos ------------------------------------------------------
     db_path: Path = Path(os.environ.get("NCAM_PANEL_DB", str(BACKEND_DIR / "data" / "panel.db")))

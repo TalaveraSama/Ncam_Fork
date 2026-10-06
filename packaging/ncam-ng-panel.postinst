@@ -52,6 +52,15 @@ NCAM_PANEL_PORT=8080
 NCAM_PANEL_SECRET=$SECRET
 NCAM_PANEL_DB=$DATA_DIR/panel.db
 
+# IPs (o rangos CIDR) de proxies de confianza: solo desde ellos se hace caso a
+# CF-Connecting-IP / X-Forwarded-For, para que la auditoría y el bloqueo por
+# intentos usen la IP real del cliente y nadie pueda falsearla.
+NCAM_PANEL_TRUSTED_PROXIES=127.0.0.1,::1
+
+# ¿Publicar el panel sin exponer la IP del servidor? Cloudflare Tunnel (sin abrir
+# puertos): ver /usr/share/doc/ncam-ng-panel/panel-sin-exponer-ip.md
+# (con el túnel en esta máquina, lo suyo es NCAM_PANEL_HOST=127.0.0.1)
+
 # WebIf del daemon NCam (motor de caché). Ajusta usuario y contraseña a los
 # de /etc/ncam/ncam.conf ([webif] httpuser/httppwd)
 NCAM_WEBIF_URL=http://127.0.0.1:8181
