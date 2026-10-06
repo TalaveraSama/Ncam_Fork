@@ -1,0 +1,17 @@
+Package: ncam-ng
+Version: @VERSION@
+Section: net
+Priority: optional
+Architecture: @ARCH@
+Maintainer: @MAINTAINER@
+Depends: libc6 (>= 2.28)
+Recommends: python3
+Installed-Size: @SIZE@
+Homepage: https://github.com/TalaveraSama/Ncam_Fork
+Description: NCam-NG - cardserver con motor de cache v2
+ NCam-NG es la version modernizada de NCam (fork de OSCam): servidor de
+ tarjetas y de comparticion con un motor de cache propio (estadisticas,
+ limite de entradas con expulsion LRU y pagina de monitorizacion en el WebIf).
+ .
+ Incluye el binario, una configuracion base en /etc/ncam/ncam.conf y el
+ servicio systemd ncam.

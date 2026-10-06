@@ -1,0 +1,21 @@
+#!/bin/sh
+# postrm del paquete ncam-ng-panel
+#   remove: deja a propósito el .env, la base de datos y el entorno virtual
+#           (así una reinstalación no pierde las cuentas ni las líneas)
+#   purge : borra también esos datos
+set -e
+ROOT="${PKGROOT:-}"
+if [ -z "$ROOT" ] && command -v systemctl >/dev/null 2>&1; then
+	case "${1:-}" in
+		remove|purge)
+			systemctl disable ncam-panel.service >/dev/null 2>&1 || true
+			systemctl daemon-reload >/dev/null 2>&1 || true
+			;;
+	esac
+fi
+if [ "${1:-}" = "purge" ]; then
+	rm -rf "$ROOT/opt/ncam-ng-panel/.venv" "$ROOT/opt/ncam-ng-panel/.env" \
+	       "$ROOT/var/lib/ncam-ng-panel" 2>/dev/null || true
+	echo "ncam-ng-panel: datos del panel eliminados (purge)"
+fi
+exit 0

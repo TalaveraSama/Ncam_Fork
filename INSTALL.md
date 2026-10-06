@@ -3,12 +3,17 @@
 Guía probada paso a paso sobre un clon limpio de
 `https://github.com/TalaveraSama/Ncam_Fork.git` (Ubuntu/Debian y similares).
 
-Hay **dos partes independientes**:
+Hay **dos partes independientes** (el daemon y el panel) y **dos formas de
+instalarlas**:
 
-| Parte | Qué es | Dónde se instala |
-| --- | --- | --- |
-| **A. Daemon NCam-NG** | El servidor de tarjetas/caché en C (motor de caché v2 y WebIf con la página del motor). | `/usr/local/bin` + `/usr/local/etc` |
-| **B. Panel NCam-NG** | La web de gestión (FastAPI + SQLite) con super admin, reseller, avisos y facturación. | La carpeta `panel/` |
+| Parte | Qué es | Con paquetes `.deb` | Desde el código |
+| --- | --- | --- | --- |
+| **Daemon NCam-NG** | El servidor de tarjetas/caché en C (motor de caché v2 y WebIf con la página del motor). | `/usr/bin/ncam` + `/etc/ncam/` | `/usr/local/bin` + `/usr/local/etc` |
+| **Panel NCam-NG** | La web de gestión (FastAPI + SQLite) con super admin, reseller, avisos y facturación. | `/opt/ncam-ng-panel` | la carpeta `panel/` |
+
+* **Con paquetes `.deb`** (sección A): lo más rápido, sin compilar; los paquetes
+  los publica este mismo repositorio en *Releases* y arrancan como servicio.
+* **Desde el código** (secciones B y C): para desarrollo o para tocar el código.
 
 ---
 
@@ -18,7 +23,9 @@ El código nuevo (motor de caché v2, página `cacheengine.html`, avisos de
 caducidad y facturación por ECM) está en la rama
 **`arena/01a10b7f-ncam-fork`**, publicada en el **PR #1**.
 
-Dos formas de usarlo:
+Si instalas con los paquetes `.deb` (sección A) no necesitas el código fuente:
+los paquetes ya salen de este repositorio. Si vas a compilar, usa una de estas
+dos formas:
 
 ```bash
 # Opción 1: trabajar directamente con la rama
@@ -34,7 +41,69 @@ cd Ncam_Fork
 
 ---
 
-## A. Daemon NCam-NG
+## A. Instalación rápida con paquetes .deb (releases)
+
+Cada release de este repositorio publica dos paquetes para amd64
+(Debian/Ubuntu) junto al instalador:
+
+```bash
+curl -fsSL -o install-deb.sh \
+  https://github.com/TalaveraSama/Ncam_Fork/releases/latest/download/install-deb.sh
+sudo sh install-deb.sh
+```
+
+El instalador descarga los `.deb` de la última release, **comprueba su SHA-256**
+y los instala con `apt`:
+
+| Paquete | Instala | Servicio systemd |
+| --- | --- | --- |
+| `ncam-ng` | `/usr/bin/ncam`, `/etc/ncam/ncam.conf`, ejemplos en `/usr/share/doc/ncam-ng/examples/` | `ncam` |
+| `ncam-ng-panel` | Panel en `/opt/ncam-ng-panel`, ajustes en `/opt/ncam-ng-panel/.env`, datos en `/var/lib/ncam-ng-panel/panel.db` | `ncam-panel` |
+
+Una vez instalado, ese mismo instalador queda en el sistema
+(`/usr/bin/ncam-ng-install-deb`), así que las siguientes veces basta con:
+
+```bash
+sudo ncam-ng-install-deb                  # actualiza a la última release
+sudo ncam-ng-install-deb --release v2.0.0 # una versión concreta
+sudo ncam-ng-install-deb --panel-only     # solo el panel
+sudo ncam-ng-install-deb --local dist/    # .deb ya descargados en dist/
+ncam-ng-install-deb --download-only       # solo descargarlos (sin root)
+```
+
+En un clon del repositorio el script es el mismo: `devtools/install-deb.sh`.
+
+Al terminar, todo queda arrancado y habilitado al inicio:
+
+```bash
+sudo systemctl status ncam ncam-panel
+sudo journalctl -u ncam-panel -f          # si algo no arranca, aquí está el motivo
+
+# WebIf del daemon + motor de caché:  http://TU_IP:8181/cacheengine.html
+# Panel de gestión:                   http://TU_IP:8080
+```
+
+Detalles que conviene saber:
+
+* El **super administrador del panel** se crea en la instalación y la contraseña
+  se imprime **una sola vez** en la propia salida de `apt`; guárdala. Si la
+  pierdes:
+  `sudo -u ncam-panel /opt/ncam-ng-panel/.venv/bin/python -m app.seed --username admin --reset-password`
+  (con `PYTHONPATH=/opt/ncam-ng-panel/backend` y `NCAM_PANEL_DB=/var/lib/ncam-ng-panel/panel.db`).
+* El **WebIf del daemon** trae el usuario `admin`/`ncam`: cámbialo en
+  `/etc/ncam/ncam.conf` (`[webif] httppwd`) y `sudo systemctl restart ncam`.
+* El panel incluye las dependencias de Python en el propio paquete: si tu
+  versión de Python coincide, se instalan sin conexión; si no, se bajan de PyPI.
+  Se puede repetir a mano con `sudo ncam-ng-panel-setup [--online]`.
+* Para **actualizar** más adelante basta con repetir el instalador
+  (`sudo ncam-ng-install-deb`): la configuración y la base de datos se conservan
+  (`--force-confold`).
+* ¿Prefieres construir los `.deb` tú mismo? `devtools/build-deb.sh --with-wheels`
+  los deja en `dist/` a partir del código de tu copia.
+
+---
+
+## B. Daemon NCam-NG (desde el código)
 
 ### 1. Dependencias
 
@@ -184,7 +253,7 @@ sudo systemctl status ncam
 
 ---
 
-## B. Panel NCam-NG
+## C. Panel NCam-NG (desde el código)
 
 ### 1. Dependencias
 
@@ -314,7 +383,22 @@ sudo systemctl restart ncam-panel         # tras cambiar panel/.env
 
 ---
 
-## C. Actualizar a una versión nueva
+## D. Actualizar a una versión nueva
+
+### Si instalaste con paquetes .deb
+
+```bash
+sudo ncam-ng-install-deb                   # baja e instala la última release
+sudo systemctl status ncam ncam-panel
+```
+
+(En un clon del repo: `sudo devtools/install-deb.sh`.)
+
+La configuración (`/etc/ncam/ncam.conf`, `/opt/ncam-ng-panel/.env`) y la base de
+datos se conservan. También puedes bajar los `.deb` a mano y hacer
+`sudo apt install ./ncam-ng_*.deb`.
+
+### Si compilas desde el código
 
 ```bash
 cd Ncam_Fork
@@ -334,7 +418,7 @@ esquema v4 añade las columnas de avisos y de consumo de ECM).
 
 ---
 
-## D. Problemas frecuentes
+## E. Problemas frecuentes
 
 | Síntoma | Causa y solución |
 | --- | --- |
@@ -351,13 +435,18 @@ esquema v4 añade las columnas de avisos y de consumo de ECM).
 | `Could not open requirements file: requirements.txt` | Estás en la raíz del repo: `pip install -r panel/requirements.txt`, o mejor `cd panel` (o usa `devtools/install-panel.sh`). |
 | `.venv` creado en la raíz del repo por error | El entorno del panel va en `panel/.venv`: borra el de la raíz (`rm -rf .venv`) y ejecuta `devtools/install-panel.sh`. |
 | `ModuleNotFoundError: No module named 'app'` | Ejecuta siempre desde `panel/` con `PYTHONPATH=backend` (o usa `./run.sh`). |
+| `ncam-ng-panel depende de python3-venv pero no se instalará` | `sudo apt install python3-venv python3-pip` y repite `sudo apt install ./ncam-ng-panel_*.deb`. |
+| Instalé el `.deb` y el panel no arranca | `sudo journalctl -u ncam-panel -n 40`; casi siempre es el entorno de Python: `sudo ncam-ng-panel-setup --online`. |
+| Perdí la contraseña del super administrador | `sudo -u ncam-panel PYTHONPATH=/opt/ncam-ng-panel/backend NCAM_PANEL_DB=/var/lib/ncam-ng-panel/panel.db /opt/ncam-ng-panel/.venv/bin/python -m app.seed --username admin --reset-password` (la imprime una vez). |
+| El panel no ve el daemon tras instalar los `.deb` | El panel usa `NCAM_WEBIF_URL` de `/opt/ncam-ng-panel/.env`; por defecto `http://127.0.0.1:8181`. Revisa que el daemon escuche (`ss -ltnp | grep 8181`) y que sus credenciales del WebIf coincidan. |
+| `dpkg: error ... el paquete está en un estado muy malo` | `sudo apt --fix-broken install` y repite la instalación del `.deb`. |
 
 Para probar el panel **sin daemon**: `python3 panel/tools/mock_ncam_webif.py
 --port 8181 --users demo_linea` y apunta `panel.ncam_webif_url` a ese puerto.
 
-## E. Pruebas (opcional)
+## F. Pruebas (opcional)
 
 ```bash
 devtools/run-cache-test.sh                 # motor de caché en C: 37 comprobaciones
-cd panel/backend && python3 -m pytest      # panel: 60 pruebas
+cd panel/backend && python3 -m pytest      # panel: 64 pruebas
 ```

@@ -60,12 +60,42 @@
   `.debug`), prefiere el del commit actual, avisa si el binario está desfasado y
   copia los ejemplos de configuración sin sobrescribir los existentes.
 
+### Paquetes .deb y releases (primera release pública)
+
+* `devtools/build-deb.sh` construye los paquetes **`ncam-ng`** (binario en
+  `/usr/bin/ncam`, configuración en `/etc/ncam/ncam.conf`, ejemplos y unidad
+  systemd `ncam`) y **`ncam-ng-panel`** (panel en `/opt/ncam-ng-panel`, unidad
+  `ncam-panel`, usuario de sistema `ncam-panel`, datos en
+  `/var/lib/ncam-ng-panel`). Admite `--version`, `--arch`, `--no-build` y
+  `--with-wheels` (incluye las dependencias de Python para instalar sin conexión).
+* `devtools/install-deb.sh`: instalador de releases. Descarga los `.deb` de la
+  última release (o de una concreta con `--release`), **verifica el SHA-256**,
+  los instala con `apt` (`--force-confold`, así no pisa la configuración del
+  usuario) y admite `--local`, `--daemon-only`, `--panel-only`, `--download-only`
+  y `--keep`. El paquete del daemon lo instala como `ncam-ng-install-deb`.
+* Scripts de mantenimiento de los paquetes (`packaging/`): `postinst`, `prerm` y
+  `postrm` de ambos paquetes (usuario de sistema, directorios de datos, `.env`
+  con secreto aleatorio, semilla del super administrador y arranque del servicio;
+  `purge` borra los datos del panel).
+* `ncam-ng-panel-setup` (dentro del paquete): crea o repara el entorno virtual y
+  las dependencias del panel, sin conexión si hay ruedas y con PyPI si no.
+* Nuevo workflow [`.github/workflows/release.yml`](.github/workflows/release.yml):
+  al empujar una etiqueta `v*` compila el daemon en un runner de GitHub, ejecuta
+  las pruebas del motor de caché y del panel, construye ambos `.deb`, genera
+  `SHA256SUMS` y publica la release en este repositorio con los paquetes y el
+  instalador adjuntos.
+* `app.seed --reset-password`: genera una contraseña nueva para un usuario
+  existente (útil para recuperar el acceso al panel si se perdió la del super
+  administrador impresa durante la instalación).
+
 ### Pruebas
 
 * `devtools/cache-engine-test.c` + `devtools/run-cache-test.sh`: compilan el motor
   de caché real con stubs y verifican 37 comportamientos (inserciones, aciertos,
   contabilidad, entradas calientes, capacidad con LRU, histórico de muestras,
   formateo de tamaños y expiración). No requiere cross-compilar el daemon.
+* Panel: `cd panel/backend && python3 -m pytest` -> 64 pruebas (auth, RBAC,
+  líneas, créditos, caché, avisos, facturación por ECM, Digest y API keys).
 
 ### Panel de gestión (`panel/`)
 

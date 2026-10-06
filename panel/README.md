@@ -20,6 +20,18 @@ créditos). Incluye además un rol de **usuario final** de solo lectura.
 > Guía completa (daemon + panel, systemd y problemas frecuentes) en
 > [`../INSTALL.md`](../INSTALL.md).
 
+**Con paquete `.deb`** (recomendado en un servidor): instala el panel en
+`/opt/ncam-ng-panel` con su servicio systemd, crea `/opt/ncam-ng-panel/.env` y la
+base de datos en `/var/lib/ncam-ng-panel/panel.db`, y arranca solo:
+
+```bash
+sudo sh install-deb.sh --panel-only         # desde la release
+sudo systemctl status ncam-panel
+sudo ncam-ng-panel-setup --online           # reinstalar dependencias de Python
+```
+
+**Desde el código:**
+
 ```bash
 # desde la raíz del repositorio (requirements.txt está en panel/)
 devtools/install-panel.sh --demo      # venv + dependencias + .env + super admin
@@ -36,6 +48,8 @@ Crear el **super administrador** (la contraseña se muestra una única vez):
 PYTHONPATH=backend python3 -m app.seed --username admin
 # datos de demostración (reseller, usuario, líneas y un peer de caché):
 PYTHONPATH=backend python3 -m app.seed --demo
+# ¿perdiste la contraseña? genera otra (imprime la nueva una única vez):
+PYTHONPATH=backend python3 -m app.seed --username admin --reset-password
 ```
 
 ### Variables de entorno principales
@@ -44,7 +58,7 @@ PYTHONPATH=backend python3 -m app.seed --demo
 |---|---|---|
 | `NCAM_PANEL_HOST` / `NCAM_PANEL_PORT` | `0.0.0.0` / `8080` | Escucha del panel. |
 | `NCAM_PANEL_SECRET` | generado en `panel/.secret_key` | Clave de firma de los JWT. |
-| `NCAM_PANEL_DB` | `panel/backend/data/panel.db` | Ruta de SQLite. |
+| `NCAM_PANEL_DB` | `panel/backend/data/panel.db` (`.deb`: `/var/lib/ncam-ng-panel/panel.db`) | Ruta de SQLite. |
 | `NCAM_WEBIF_URL` | `http://127.0.0.1:8181` | WebIf del daemon NCam. |
 | `NCAM_WEBIF_USER` / `NCAM_WEBIF_PASSWORD` | vacío | Si el WebIf pide autenticación. |
 | `NCAM_PANEL_CACHE_POLL` / `_INTERVAL` | `1` / `60` | Muestreo periódico de métricas de caché. |
@@ -275,7 +289,7 @@ ofrece el último histórico guardado.
 
 ```bash
 cd panel/backend
-python3 -m pytest          # 38 pruebas: auth, RBAC, líneas, créditos, caché,
+python3 -m pytest          # 64 pruebas: auth, RBAC, líneas, créditos, caché,
                            # ajustes, auditoría, API keys y suspensión de cuentas
 ```
 

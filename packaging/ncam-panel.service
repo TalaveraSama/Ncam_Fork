@@ -1,0 +1,21 @@
+[Unit]
+Description=NCam-NG Panel (API + web de gestión)
+Documentation=file:///usr/share/doc/ncam-ng-panel/README.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/ncam-ng-panel
+Environment=PYTHONPATH=/opt/ncam-ng-panel/backend
+Environment=NCAM_PANEL_HOST=0.0.0.0
+Environment=NCAM_PANEL_PORT=8080
+ExecStart=/opt/ncam-ng-panel/.venv/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port 8080
+Restart=on-failure
+RestartSec=5
+# usuario sin privilegios creado por el paquete
+User=ncam-panel
+Group=ncam-panel
+
+[Install]
+WantedBy=multi-user.target

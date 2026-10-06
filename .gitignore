@@ -17,6 +17,9 @@ Distribution/.*
 # build directories
 /build/
 
+# paquetes .deb generados por devtools/build-deb.sh
+/dist/
+
 # Currently enabled config items
 webif/is_defined.txt
 

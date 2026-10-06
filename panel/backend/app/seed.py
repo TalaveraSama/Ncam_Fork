@@ -8,6 +8,7 @@ Uso:
     python -m app.seed                 # crea el super admin y muestra la clave
     python -m app.seed --demo          # añade datos de ejemplo
     python -m app.seed --username X --password Y
+    python -m app.seed --username X --reset-password   # nueva clave para X
 """
 
 from __future__ import annotations
@@ -151,14 +152,48 @@ def create_demo_data() -> None:
         print(f"Creados: reseller=demo_reseller (id {reseller['id']}), usuario={user['username']}")
 
 
+def reset_password(username: str, password: str | None = None) -> tuple[str, str] | None:
+    """Asigna una contraseña nueva a un usuario que ya existe.
+
+    Devuelve ``(usuario, contraseña)`` o ``None`` si el usuario no existe.
+    """
+    new_password = password or _random_password()
+    with database.session() as conn:
+        row = database.query_one(conn, "SELECT id FROM users WHERE username = ?", (username,))
+        if row is None:
+            return None
+        database.update(conn, "users", int(row["id"]), {"password_hash": hash_password(new_password)})
+    return username, new_password
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Inicializa la base de datos del panel NCam-NG")
     parser.add_argument("--username", default="admin", help="usuario del super administrador")
     parser.add_argument("--password", default=None, help="contraseña (si se omite se genera una)")
     parser.add_argument("--demo", action="store_true", help="crear datos de demostración")
+    parser.add_argument(
+        "--reset-password",
+        action="store_true",
+        help="cambia la contraseña de --username (útil si se perdió la del super admin)",
+    )
     args = parser.parse_args(argv)
 
     database.init_db()
+
+    if args.reset_password:
+        result = reset_password(args.username, args.password)
+        if result is None:
+            print(f"No existe ningún usuario llamado {args.username}.", file=sys.stderr)
+            return 1
+        user, new_password = result
+        print("=" * 62)
+        print("  CONTRASEÑA CAMBIADA")
+        print(f"  usuario:    {user}")
+        print(f"  contraseña: {new_password}")
+        print("  Guárdela: no se vuelve a mostrar.")
+        print("=" * 62)
+        return 0
+
     username, password, created = ensure_super_admin(args.username, args.password)
 
     print(f"Base de datos: {settings.db_path}")

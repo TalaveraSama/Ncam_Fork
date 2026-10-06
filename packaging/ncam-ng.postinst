@@ -1,0 +1,48 @@
+#!/bin/sh
+# ---------------------------------------------------------------------------
+# postinst del paquete ncam-ng (daemon NCam-NG)
+#
+# Comportamiento:
+#   * crea el directorio de logs
+#   * recarga systemd, habilita y arranca el servicio
+#   * muestra la URL del WebIf y recuerda cambiar la contraseña
+#
+# Para poder probarlo sin ser root, todas las rutas se prefijan con $PKGROOT
+# (vacío en una instalación real).
+# ---------------------------------------------------------------------------
+set -e
+
+ROOT="${PKGROOT:-}"
+ACTION="${1:-configure}"
+
+log() { echo "ncam-ng: $*"; }
+
+[ "$ACTION" = "configure" ] || exit 0
+
+# 1. directorio de logs
+mkdir -p "$ROOT/var/log/ncam"
+chmod 0755 "$ROOT/var/log/ncam"
+
+# 2. permisos de la configuración (contiene la contraseña del WebIf)
+if [ -f "$ROOT/etc/ncam/ncam.conf" ]; then
+	chmod 0640 "$ROOT/etc/ncam/ncam.conf"
+	chown root:root "$ROOT/etc/ncam/ncam.conf" 2>/dev/null || true
+fi
+
+# 3. systemd
+if [ -z "$ROOT" ] && command -v systemctl >/dev/null 2>&1 && [ -d /run/systemd/system ]; then
+	if systemctl daemon-reload >/dev/null 2>&1; then
+		systemctl enable ncam.service >/dev/null 2>&1 || true
+		# en una actualización se reinicia; si ya estaba parado, se arranca
+		systemctl is-active --quiet ncam.service && systemctl restart ncam.service \
+			|| systemctl start ncam.service || true
+	fi
+fi
+
+log "daemon instalado en /usr/bin/ncam (configuración: /etc/ncam/ncam.conf)"
+log "estado:      systemctl status ncam"
+log "logs:        journalctl -u ncam -f   (o /var/log/ncam/ncam.log)"
+log "WebIf:       http://TU_IP:8181/cacheengine.html  (usuario admin)"
+log "recuerda cambiar la contraseña del WebIf en /etc/ncam/ncam.conf"
+
+exit 0

@@ -1,0 +1,124 @@
+name: Release (.deb)
+
+# Publica una release con los paquetes .deb del daemon y del panel.
+#
+#   * al empujar una etiqueta:   git tag v2.0.0 && git push origin v2.0.0
+#   * o a mano desde la pestaña "Actions"  (Release (.deb) -> Run workflow)
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Versión sin la "v" (ej. 2.0.0)'
+        required: true
+        default: '2.0.0'
+
+permissions:
+  contents: write
+
+jobs:
+  deb:
+    name: Paquetes .deb (amd64)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Descargar el código
+        uses: actions/checkout@v4
+
+      - name: Dependencias
+        run: |
+          sudo apt-get -qq update
+          sudo apt-get -y install build-essential python3-pip python3-venv
+
+      - name: Versión
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION="${{ github.event.inputs.version }}"
+          else
+            VERSION="${GITHUB_REF_NAME#v}"
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
+          echo "==> versión: $VERSION"
+
+      - name: Pruebas del motor de caché
+        run: sh devtools/run-cache-test.sh
+
+      - name: Pruebas del panel
+        run: |
+          python3 -m venv /tmp/testsenv
+          /tmp/testsenv/bin/pip install -q -r panel/requirements.txt httpx pytest
+          cd panel/backend && /tmp/testsenv/bin/python -m pytest -q
+
+      - name: Configurar y compilar
+        run: |
+          ./config.sh --disable WITH_SOFTCAM
+          make -j"$(nproc)"
+
+      - name: Comprobar el binario
+        run: |
+          BIN=$(ls -1t Distribution/ncam-Unofficial-*-x86_64-linux-gnu | grep -v '\.debug$' | head -n1)
+          echo "binario: $BIN"
+          readelf -d "$BIN" | grep NEEDED || true
+          "$BIN" -V
+
+      - name: Construir los .deb
+        run: |
+          sh devtools/build-deb.sh --no-build \
+            --version "${{ steps.version.outputs.version }}" \
+            --arch amd64 --with-wheels
+          cd dist && sha256sum ./*.deb > SHA256SUMS
+          ls -la .
+
+      - name: Guardar los .deb como artefactos
+        uses: actions/upload-artifact@v4
+        with:
+          name: ncam-ng-deb-${{ steps.version.outputs.version }}
+          path: |
+            dist/*.deb
+            dist/SHA256SUMS
+          if-no-files-found: error
+
+      - name: Publicar la release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: NCam-NG ${{ steps.version.outputs.version }}
+          generate_release_notes: true
+          body: |
+            Paquetes **.deb** de NCam-NG para amd64 (Debian/Ubuntu):
+
+            | Paquete | Contenido |
+            |---|---|
+            | `ncam-ng_${{ steps.version.outputs.version }}_amd64.deb` | Daemon con el motor de caché v2, `/etc/ncam/ncam.conf` y el servicio systemd `ncam` |
+            | `ncam-ng-panel_${{ steps.version.outputs.version }}_amd64.deb` | Panel web (super admin / reseller), servicio systemd `ncam-panel` |
+
+            ## Instalación
+
+            ```bash
+            curl -fsSL -o install-deb.sh \
+              https://github.com/${{ github.repository }}/releases/latest/download/install-deb.sh
+            sudo sh install-deb.sh
+            ```
+
+            O instalando los adjuntos a mano:
+
+            ```bash
+            sudo apt install ./ncam-ng_${{ steps.version.outputs.version }}_amd64.deb \
+                             ./ncam-ng-panel_${{ steps.version.outputs.version }}_amd64.deb
+            ```
+
+            Los `.deb` se comprueban con `SHA256SUMS` (el instalador lo verifica solo):
+
+            ```bash
+            sha256sum -c SHA256SUMS
+            ```
+
+            Guía completa: [INSTALL.md](https://github.com/${{ github.repository }}/blob/${{ steps.version.outputs.tag }}/INSTALL.md)
+          files: |
+            dist/*.deb
+            dist/SHA256SUMS
+            devtools/install-deb.sh
+            INSTALL.md

@@ -125,7 +125,26 @@ Detalles completos en [`panel/README.md`](panel/README.md).
 
 ---
 
-## 3. Instalación completa
+## 3. Instalación
+
+### Con paquetes `.deb` (lo más rápido)
+
+Cada release publica los paquetes del daemon y del panel para amd64
+(Debian/Ubuntu) junto a un instalador que verifica su SHA-256:
+
+```bash
+curl -fsSL -o install-deb.sh \
+  https://github.com/TalaveraSama/Ncam_Fork/releases/latest/download/install-deb.sh
+sudo sh install-deb.sh          # deja los servicios ncam y ncam-panel activos
+```
+
+Tras instalarlos, `sudo ncam-ng-install-deb` actualiza a la última release.
+¿Prefieres construir los paquetes tú mismo? `devtools/build-deb.sh --with-wheels`
+genera los `.deb` en `dist/`, y el workflow
+[`.github/workflows/release.yml`](.github/workflows/release.yml) los publica al
+empujar una etiqueta `v*`.
+
+### Desde el código
 
 Guía paso a paso (daemon + panel, con systemd y problemas frecuentes):
 [`INSTALL.md`](INSTALL.md).
@@ -166,11 +185,15 @@ documentación de configuración clásica.
 ├── webif/cache/cache.html          # página del motor de caché del WebIf
 ├── devtools/cache-engine-test.c    # banco de pruebas del motor de caché
 ├── devtools/run-cache-test.sh
+├── devtools/build-deb.sh           # construye los paquetes .deb
+├── devtools/install-deb.sh         # descarga e instala los .deb de una release
+├── packaging/                      # control, servicios systemd y scripts de los .deb
+├── .github/workflows/release.yml   # compila y publica los .deb al etiquetar v*
 ├── Distribution/doc/example/ncam.conf
 ├── docs/cache-engine.md            # documentación técnica del motor v2
 └── panel/                          # panel de gestión (super admin / reseller)
     ├── backend/app/                # API FastAPI + SQLite
-    ├── backend/tests/              # 38 pruebas automatizadas
+    ├── backend/tests/              # 64 pruebas automatizadas
     ├── frontend/                   # SPA en JavaScript puro
     └── tools/mock_ncam_webif.py    # simulador del WebIf para desarrollo
 ```
@@ -179,7 +202,7 @@ documentación de configuración clásica.
 
 ```bash
 devtools/run-cache-test.sh                        # motor de caché (C): 37 comprobaciones
-cd panel/backend && python3 -m pytest             # API del panel (Python): 50 pruebas
+cd panel/backend && python3 -m pytest             # API del panel (Python): 64 pruebas
 ```
 
 ## 6. Aviso legal

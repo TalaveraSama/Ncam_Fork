@@ -1,0 +1,122 @@
+#!/bin/sh
+# ---------------------------------------------------------------------------
+# postinst del paquete ncam-ng-panel
+#
+#   * crea el usuario de sistema ncam-panel
+#   * crea /var/lib/ncam-ng-panel (base de datos) y su .env con secreto propio
+#   * prepara el entorno virtual e instala las dependencias (offline si puede)
+#   * habilita y arranca el servicio
+#
+# Rutas prefijadas con $PKGROOT para poder probarlo sin ser root.
+# ---------------------------------------------------------------------------
+set -e
+
+ROOT="${PKGROOT:-}"
+ACTION="${1:-configure}"
+PANEL_DIR="$ROOT/opt/ncam-ng-panel"
+DATA_DIR="$ROOT/var/lib/ncam-ng-panel"
+ENV_FILE="$PANEL_DIR/.env"
+
+log() { echo "ncam-ng-panel: $*"; }
+
+# detiene el servicio en una actualización (el paquete aún no tiene unit nuevas)
+if [ "$ACTION" = "configure" ] && [ -z "$ROOT" ] && command -v systemctl >/dev/null 2>&1; then
+	systemctl stop ncam-panel.service >/dev/null 2>&1 || true
+fi
+
+[ "$ACTION" = "configure" ] || exit 0
+
+# 1. usuario de sistema
+if [ -z "$ROOT" ] && ! id ncam-panel >/dev/null 2>&1; then
+	adduser --system --group --no-create-home --home /nonexistent \
+		--gecos "NCam-NG Panel" ncam-panel >/dev/null 2>&1 || \
+		useradd --system --user-group --no-create-home --home-dir /nonexistent \
+			--comment "NCam-NG Panel" ncam-panel >/dev/null 2>&1 || true
+	log "usuario del sistema: ncam-panel"
+fi
+
+# 2. directorios
+mkdir -p "$DATA_DIR"
+chmod 0750 "$DATA_DIR"
+
+# 3. fichero .env (se respeta si ya existe, p. ej. al actualizar)
+if [ ! -f "$ENV_FILE" ]; then
+	SECRET=$(python3 -c "import secrets; print(secrets.token_urlsafe(48))" 2>/dev/null || head -c 48 /dev/urandom | base64 | tr -d '\n')
+	umask 027
+	cat > "$ENV_FILE" <<EOF
+# NCam-NG Panel :: configuración (creada por el paquete)
+# Tras cambiarla:  sudo systemctl restart ncam-panel
+
+NCAM_PANEL_HOST=0.0.0.0
+NCAM_PANEL_PORT=8080
+NCAM_PANEL_SECRET=$SECRET
+NCAM_PANEL_DB=$DATA_DIR/panel.db
+
+# WebIf del daemon NCam (motor de caché). Ajusta usuario y contraseña a los
+# de /etc/ncam/ncam.conf ([webif] httpuser/httppwd)
+NCAM_WEBIF_URL=http://127.0.0.1:8181
+NCAM_WEBIF_USER=admin
+NCAM_WEBIF_PASSWORD=ncam
+
+# Nombre del panel (aparece en los avisos de caducidad)
+NCAM_PANEL_NAME="NCam-NG Panel"
+NCAM_PANEL_NOTIFY=1
+EOF
+	chmod 0640 "$ENV_FILE"
+	log "configuración creada: $ENV_FILE (secreto aleatorio incluido)"
+else
+	log "configuración conservada: $ENV_FILE"
+fi
+
+# 4. permisos (el servicio corre como ncam-panel)
+if [ -z "$ROOT" ]; then
+	chown -R ncam-panel:ncam-panel "$DATA_DIR" 2>/dev/null || true
+	chown -R root:ncam-panel "$PANEL_DIR" 2>/dev/null || true
+	chmod 0640 "$ENV_FILE" 2>/dev/null || true
+	chmod 0750 "$PANEL_DIR" 2>/dev/null || true
+fi
+
+# 5. dependencias de Python (entorno virtual)
+if [ -x "$PANEL_DIR/setup-install.sh" ]; then
+	if ! PANEL_DIR="${PANEL_DIR%/}" sh "$PANEL_DIR/setup-install.sh"; then
+		log "AVISO: no se pudieron preparar las dependencias."
+		log "       ejecuta a mano:  sudo ncam-ng-panel-setup --online"
+	fi
+elif [ -z "$ROOT" ] && [ -x /usr/bin/ncam-ng-panel-setup ]; then
+	if ! /usr/bin/ncam-ng-panel-setup; then
+		log "AVISO: no se pudieron preparar las dependencias."
+		log "       ejecuta a mano:  sudo ncam-ng-panel-setup --online"
+	fi
+fi
+
+# 6. super administrador (solo si la base de datos es nueva)
+if [ -z "$ROOT" ] && [ -x "$PANEL_DIR/.venv/bin/python" ] && [ ! -f "$DATA_DIR/panel.db" ]; then
+	log "creando el super administrador del panel..."
+	if PYTHONPATH="$PANEL_DIR/backend" NCAM_PANEL_DB="$DATA_DIR/panel.db" \
+			"$PANEL_DIR/.venv/bin/python" -m app.seed --username admin 2>&1 | sed 's/^/    /'; then
+		:
+	else
+		log "AVISO: no se pudo crear el super administrador; ejecuta:"
+		log "       sudo -u ncam-panel PYTHONPATH=$PANEL_DIR/backend NCAM_PANEL_DB=$DATA_DIR/panel.db $PANEL_DIR/.venv/bin/python -m app.seed --username admin"
+	fi
+fi
+
+# 7. systemd
+if [ -z "$ROOT" ] && command -v systemctl >/dev/null 2>&1 && [ -d /run/systemd/system ]; then
+	if systemctl daemon-reload >/dev/null 2>&1; then
+		systemctl enable ncam-panel.service >/dev/null 2>&1 || true
+		systemctl start ncam-panel.service || {
+			log "AVISO: el servicio no arrancó; revisa: journalctl -u ncam-panel -n 40"
+		}
+	fi
+fi
+
+log "panel instalado en $PANEL_DIR"
+log "configuración:  $ENV_FILE"
+log "base de datos:  $DATA_DIR/panel.db"
+log "estado:         systemctl status ncam-panel"
+log "logs:           journalctl -u ncam-panel -f"
+log "web:            http://TU_IP:8080   (usuario admin; la contraseña la mostró la semilla)"
+log "guarda esa contraseña: no se vuelve a mostrar"
+
+exit 0

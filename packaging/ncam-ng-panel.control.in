@@ -1,0 +1,17 @@
+Package: ncam-ng-panel
+Version: @VERSION@
+Section: net
+Priority: optional
+Architecture: @ARCH@
+Maintainer: @MAINTAINER@
+Depends: python3 (>= 3.9), python3-venv
+Recommends: ncam-ng, python3-pip
+Installed-Size: @SIZE@
+Homepage: https://github.com/TalaveraSama/Ncam_Fork
+Description: NCam-NG Panel - panel web de gestion (super admin / reseller)
+ Panel de gestion para NCam-NG: roles de super administrador, reseller y usuario
+ final, gestion de lineas y creditos, monitorizacion del motor de cache, avisos
+ de caducidad por email/Telegram y facturacion por consumo de ECM.
+ .
+ Sirve la API y la interfaz web en el puerto 8080; la base de datos SQLite y el
+ fichero .env se crean en la instalacion (/var/lib/ncam-ng-panel).
