@@ -14,6 +14,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
+import re
 import socket
 import sqlite3
 import time
@@ -340,6 +341,46 @@ def check_cache_server(conn: sqlite3.Connection, server_id: int, host: str, port
 # ---------------------------------------------------------------------------
 # generadores de configuración
 # ---------------------------------------------------------------------------
+# CAID en formato NCam: ``1801``, con máscara ``1801&FFFF`` o con cmap
+# ``1801:01``; varios separados por comas (``1801,1861,0B00``).
+CAID_PATTERN = re.compile(r"^[0-9A-F]{1,4}(&[0-9A-F]{1,4})?(:[0-9A-F]{1,2})?$")
+
+
+def _pad_caid(token: str) -> str:
+    """Deja el CAID con 4 dígitos (``b00`` -> ``0B00``) conservando máscara/cmap."""
+    for separator in ("&", ":"):
+        if separator in token:
+            head, _, tail = token.partition(separator)
+            return f"{head.zfill(4)}{separator}{tail}"
+    return token.zfill(4)
+
+
+def normalize_caids(value: Optional[str]) -> str:
+    """Normaliza la lista de CAIDs permitidos de una línea.
+
+    Acepta lo mismo que NCam (``1801``, ``1801,1861,0B00``, ``1801&FFFF``,
+    ``1861:01``), quita espacios, pasa a mayúsculas y valida el formato.
+    Devuelve ``""`` cuando no hay restricción. Lanza ``ValueError`` con el
+    detalle si algún valor no es válido.
+    """
+    if not value:
+        return ""
+    caids: list[str] = []
+    for raw in str(value).replace(";", ",").split(","):
+        token = raw.strip().upper()
+        if not token:
+            continue
+        if not CAID_PATTERN.match(token):
+            raise ValueError(
+                f"CAID no válido: '{raw.strip()}'. Usa 4 dígitos hexadecimales "
+                "(p. ej. 1801) separados por comas: 1801,1861,0B00"
+            )
+        token = _pad_caid(token)
+        if token not in caids:
+            caids.append(token)
+    return ",".join(caids)
+
+
 def render_account_config(line: sqlite3.Row | dict[str, Any]) -> str:
     """Bloque ``[account]`` para ncam.user (línea de cliente)."""
     data = dict(line)
@@ -352,16 +393,27 @@ def render_account_config(line: sqlite3.Row | dict[str, Any]) -> str:
         ("monlevel", "1"),
         ("au", "1"),
     ]
+    # permiso por CAID: sin valor, el usuario ve todos los CAID de su grupo
+    caids = normalize_caids(data.get("caid_allow"))
+    if caids:
+        entries.append(("caid", caids))
     if int(data.get("cacheex_mode") or 0) > 0:
         entries.append(("cacheex", str(data["cacheex_mode"])))
         if int(data.get("cacheex_maxhop") or 0) > 0:
             entries.append(("cacheex_maxhop", str(data["cacheex_maxhop"])))
     if int(data.get("cacheex_disable") or 0):
         entries.append(("cacheex_disable", "1"))
-    if int(data.get("max_connections") or 0) > 0:
-        entries.append(("cccmaxhops", "1"))
+    # conexiones simultáneas que admite la cuenta (1 = solo una)
+    connections = int(data.get("max_connections") or 1)
+    if connections != 1:
+        entries.append(("max_connections", str(connections)))
+    # saltos CCcam: cuántos saltos puede ver el cliente (0 = solo tus tarjetas
+    # directas, valores mayores = tarjetas más lejanas y revendedores)
+    hops = data.get("cccmaxhops")
+    if hops is not None and int(hops) >= 0:
+        entries.append(("cccmaxhops", str(int(hops))))
 
-    header = f"# Línea '{data.get('name')}' ({data.get('protocol')}) - panel NCam-NG"
+    header = f"# Línea '{data.get('name')}' ({data.get('protocol')}) - NCPanel"
     body = "\n".join(f"{key:<16} = {value}" for key, value in entries)
     return f"{header}\n[account]\n{body}\n"
 
@@ -372,7 +424,7 @@ def render_cache_peer_config(server: sqlite3.Row | dict[str, Any], username: Opt
     protocol = str(data.get("protocol") or "cccam")
     label = str(data.get("name") or "cacheex_peer").replace(" ", "_")
     lines = [
-        f"# Peer de caché '{data.get('name')}' - panel NCam-NG",
+        f"# Peer de caché '{data.get('name')}' - NCPanel",
         "[reader]",
         f"label           = {label}",
         f"protocol        = {protocol}",
@@ -402,18 +454,32 @@ def render_cache_section(conn: sqlite3.Connection) -> str:
     max_time = database.get_setting(conn, "ncam.cache.max_time", "15")
     max_entries = database.get_setting(conn, "ncam.cache.max_entries", "0")
     cacheex = database.get_setting(conn, "ncam.cache.cacheex_enable", "1")
+    cacheex_on = str(cacheex) in {"1", "true", "yes"}
     lines = [
-        "# Motor de caché - generado por el panel NCam-NG",
+        "# Motor de caché v2 - generado por NCPanel",
+        "# La caché se consulta siempre antes de pedir a los lectores.",
         "[cache]",
-        "delay           = 120",
-        f"max_time        = {max_time}",
-        f"max_entries     = {max_entries}",
-        "max_hit_time    = 15",
-        "wait_time       = 0",
-        "cacheexenablestats = 1",
+        "# milisegundos de espera al servir desde caché (0 = al instante;",
+        "# 120 si tienes tarjeta local y ves ciclos de CW)",
+        "delay             = 0",
+        f"max_time          = {max_time}",
+        f"max_entries       = {max_entries}",
+        "# memoria de aciertos de cacheex (0 = desactivada)",
+        "max_hit_time      = 15",
+        f"cacheexenablestats = {1 if cacheex_on else 0}",
     ]
-    if str(cacheex) in {"1", "true", "yes"}:
-        lines.extend(["cacheex_dropdiffs = 0", "cacheex_localgenerated_only = 0"])
+    if cacheex_on:
+        lines.extend(
+            [
+                "# intercambio de caché con otros servidores",
+                "cacheex_dropdiffs = 0",
+                "cacheex_localgenerated_only = 0",
+                "cw_cache_size    = 8192",
+                "cw_cache_memory  = 8",
+                "ecm_cache_size   = 8192",
+                "ecm_cache_memory = 8",
+            ]
+        )
     return "\n".join(lines) + "\n"
 
 
@@ -467,7 +533,7 @@ def export_line(
     if fmt == "cccam":
         return (
             f"C: {host} {port} {username} {password} yes\n"
-            f"# línea '{data.get('name')}' (panel NCam-NG)"
+            f"# línea '{data.get('name')}' (NCPanel)"
         )
     if fmt == "newcamd":
         return f"N: {host} {port} {username} {password} 01 02 03 04 05 06 07 08 09 10 11 12 13 14\n"

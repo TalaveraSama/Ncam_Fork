@@ -15,7 +15,7 @@
 # ---------------------------------------------------------------------------
 set -e
 
-VERSION="2.2.1"
+VERSION="2.3.0"
 ARCH="$(dpkg --print-architecture 2>/dev/null || echo amd64)"
 DO_BUILD=1
 WITH_WHEELS=0
@@ -81,7 +81,7 @@ mkdir -p "$dist" "$work"
 say "==> empaquetando el daemon"
 pkg="$work/ncam-ng"
 mkdir -p "$pkg/DEBIAN" "$pkg/usr/bin" "$pkg/etc/ncam" "$pkg/lib/systemd/system" \
-         "$pkg/usr/share/doc/ncam-ng/examples"
+         "$pkg/usr/share/doc/ncam-ng/examples/optimo"
 
 install -m 0755 "$binary" "$pkg/usr/bin/ncam"
 # el instalador de releases, para poder actualizar con un solo comando
@@ -97,9 +97,13 @@ install -m 0644 "$packaging/ncam.service" "$pkg/lib/systemd/system/ncam.service"
 for file in ncam.conf ncam.server ncam.user ncam.services ncam.srvid2; do
 	install_doc "Distribution/doc/example/$file" "$pkg/usr/share/doc/ncam-ng/examples/$file"
 done
+for file in ncam.conf ncam.server ncam.user; do
+	install_doc "examples/$file" "$pkg/usr/share/doc/ncam-ng/examples/optimo/$file"
+done
 install_doc README.md    "$pkg/usr/share/doc/ncam-ng/README.md"
 install_doc CHANGELOG.md "$pkg/usr/share/doc/ncam-ng/CHANGELOG.md"
 install_doc INSTALL.md   "$pkg/usr/share/doc/ncam-ng/INSTALL.md"
+install_doc docs/configuracion-optima.md "$pkg/usr/share/doc/ncam-ng/configuracion-optima.md"
 
 install -m 0755 "$packaging/ncam-ng.postinst" "$pkg/DEBIAN/postinst"
 install -m 0755 "$packaging/ncam-ng.prerm"    "$pkg/DEBIAN/prerm"

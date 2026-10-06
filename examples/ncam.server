@@ -1,0 +1,134 @@
+# =============================================================================
+#  NCam-NG :: ncam.server  —  LECTORES (de dónde saca NCam los CW)
+# =============================================================================
+#
+#  Ejemplos listos para copiar. Reglas de oro:
+#
+#  * `caid`  limita qué CAID puede pedir ese lector (aquí los tres: 1801,
+#    1861, 0B00). Si un proveedor solo te da uno, pon solo ese.
+#  * `group` es el grupo al que pertenece el lector; los usuarios llevan en su
+#    [account] `group = 1,2` (los que quieran) → así se da o quita acceso
+#    también por lector.
+#  * `audisabled = 1` en líneas de proveedor: no pedir EMM/actualizaciones,
+#    así las líneas van más ligeras y no se resetean.
+#  * Cada lector que responde alimenta la caché automáticamente (no hay que
+#    activar nada): el CW queda guardado `max_time` segundos y las siguientes
+#    peticiones del mismo ECM se sirven al instante. Ajustes en [cache] de
+#    ncam.conf.
+#
+#  Copia estos bloques en /etc/ncam/ncam.server y recarga:
+#      sudo restart-ncam
+# =============================================================================
+
+
+# -----------------------------------------------------------------------------
+# 1) LÍNEA CCcam (lo más común: tu proveedor te da una C: o un host/usuario)
+#    Formato de la línea que suele darte el proveedor:
+#        C: servidor-proveedor.com 12000 usuario clave yes
+#    En NCam se traduce así:
+# -----------------------------------------------------------------------------
+[reader]
+label                         = linea-cccam-3caids
+description                   = Proveedor CCcam (1801 + 1861 + 0B00)
+enable                        = 1
+protocol                      = cccam
+device                        = servidor-proveedor.com,12000
+user                          = usuario_del_proveedor
+password                      = clave_del_proveedor
+# saltos permitidos al pedir por esta línea (el proveedor suele admitir 5-10)
+cccmaxhops                    = 10
+cccversion                    = 2.3.2
+# mantener la conexión viva y reconectar rápido si se cae
+ccckeepalive                  = 1
+cccreconnect                  = 30
+# qué CAID pedimos por esta línea (los tres)
+caid                          = 1801,1861,0B00
+# grupo 1 = lo usan los usuarios con group = 1
+group                         = 1
+lb_weight                     = 200
+# sin EMM/AU en líneas de proveedor
+audisabled                    = 1
+# no rendirse en un ECM (la caché y el balanceo ya evitan abusar)
+ecmnotfoundlimit              = 0
+# no descartar CW "raros": algunos proveedores los mandan así
+dropbadcws                    = 0
+
+
+# -----------------------------------------------------------------------------
+# 2) LÍNEA NEWCAMD (si el proveedor usa N: en lugar de C:)
+#    Formato típico:  N: servidor 50000 usuario clave 01 02 03 ... 14
+# -----------------------------------------------------------------------------
+[reader]
+label                         = linea-newcamd-3caids
+description                   = Proveedor Newcamd (1801 + 1861 + 0B00)
+enable                        = 1
+protocol                      = newcamd
+device                        = servidor-proveedor.com,50000
+key                           = 0102030405060708091011121314
+user                          = usuario_del_proveedor
+password                      = clave_del_proveedor
+caid                          = 1801,1861,0B00
+group                         = 2
+lb_weight                     = 100
+audisabled                    = 1
+inactivitytimeout             = 0
+
+
+# -----------------------------------------------------------------------------
+# 3) TARJETA LOCAL (solo si tienes una tarjeta física en esta máquina)
+#    Lo local siempre gana: `preferlocalcards = 2` la usa antes que la caché y
+#    que los proveedores.
+# -----------------------------------------------------------------------------
+#[reader]
+#label                        = tarjeta-local-1801
+#description                  = Tarjeta local del CAID 1801
+#enable                       = 1
+#protocol                     = internal      # o pcsc / smartreader
+#device                       = 0               # /dev/ttyUSB0, 1, 2...
+#caid                         = 1801
+#group                        = 3
+#au                           = 1
+#emmcache                     = 1,3,2
+#lb_weight                    = 300
+#mhz                          = 357
+#cardmhz                      = 357
+
+
+# -----------------------------------------------------------------------------
+# 4) PEER DE CACHEX (compartir caché con otro servidor NCam/OSCam)
+#    Lo que llegue de este peer se guarda en la caché interna y tus clientes
+#    normales lo aprovechan (con preferlocalcards = 2). El peer también puede
+#    ser un usuario de cacheex (ver ncam.user).
+# -----------------------------------------------------------------------------
+#[reader]
+#label                        = peer-cacheex
+#description                  = Otro servidor compartiendo caché
+#enable                       = 1
+#protocol                     = cccam
+#device                       = otro-servidor.com,12000
+#user                         = usuario_cacheex
+#password                     = clave_cacheex
+#caid                         = 1801,1861,0B00
+#group                        = 5
+#cacheex                      = 3              # 1 = solo pedir, 2 = solo enviar, 3 = ambas
+#cacheex_maxhop               = 2
+#cacheex_drop_csp             = 1
+#audisabled                   = 1
+
+
+# -----------------------------------------------------------------------------
+# 5) LÍNEA DE UN SOLO CAID (por si un proveedor solo te da uno de los tres)
+#    El usuario que tenga ese CAID en su [account] solo verá este.
+# -----------------------------------------------------------------------------
+#[reader]
+#label                        = linea-solo-0b00
+#protocol                     = cccam
+#device                       = servidor-proveedor.com,12000
+#user                         = usuario
+#password                     = clave
+#caid                         = 0B00
+#group                        = 4
+#cccmaxhops                   = 10
+#cccversion                   = 2.3.2
+#ccckeepalive                 = 1
+#audisabled                   = 1

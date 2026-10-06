@@ -154,6 +154,8 @@ jobs:
 
             Guía completa: [INSTALL.md](https://github.com/${{ github.repository }}/blob/${{ steps.version.outputs.tag }}/INSTALL.md)
 
+            Configuración óptima del daemon (3 CAID, caché y permisos): [docs/configuracion-optima.md](https://github.com/${{ github.repository }}/blob/${{ steps.version.outputs.tag }}/docs/configuracion-optima.md)
+
             Configuración del panel (campo por campo): [docs/ajustes.md](https://github.com/${{ github.repository }}/blob/${{ steps.version.outputs.tag }}/docs/ajustes.md)
             (también adjunta a esta release y en el servidor, en `/opt/ncam-ng-panel/docs/ajustes.md`).
           files: |
@@ -162,3 +164,7 @@ jobs:
             devtools/install-deb.sh
             INSTALL.md
             docs/ajustes.md
+            docs/configuracion-optima.md
+            examples/ncam.conf
+            examples/ncam.server
+            examples/ncam.user

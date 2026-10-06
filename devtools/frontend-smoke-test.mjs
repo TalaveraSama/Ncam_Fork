@@ -140,5 +140,39 @@ await new Promise((resolve) => setTimeout(resolve, 100));
 check("los campos enmascarados no se envían", sent !== null && !("panel.ncam_webif_password" in sent.values));
 check("los campos normales sí se envían", sent !== null && sent.values["panel.port.cccam"] === "12000");
 
+// --- formulario de línea: permiso por CAID ---------------------------------
+await window.eval(`(async () => {
+  state.user = { username: "admin", role: "super_admin", credits: 0 };
+  await openLineForm([], async () => {}, null);
+})()`);
+const formHTML = doc.querySelector("#modal-root").innerHTML;
+check("el formulario de línea tiene el campo de CAIDs", formHTML.includes('name="caid_allow"'));
+check("tiene botones rápidos de CAID", (formHTML.match(/data-caid=/g) || []).length === 4);
+check("tiene el campo de saltos CCcam", formHTML.includes('name="cccmaxhops"'));
+const modalForm = doc.querySelector("#modal-root form");
+const caidInput = doc.querySelector("#line-caid");
+doc.querySelector('#modal-root button[data-caid="1801"]').click();
+doc.querySelector('#modal-root button[data-caid="0B00"]').click();
+check("los botones rápidos añaden CAID", caidInput.value === "1801,0B00");
+doc.querySelector('#modal-root button[data-caid="1801"]').click();
+check("volver a pulsar lo quita", caidInput.value === "0B00");
+doc.querySelector('#modal-root button[data-caid=""]').click();
+check("el botón Todos vacía el campo", caidInput.value === "");
+
+// el formulario se envía con el caid_allow
+let sentLine = null;
+window.fetch = async (url, options = {}) => {
+  sentLine = JSON.parse(options.body);
+  return {
+    ok: true, status: 201, headers: { get: () => "application/json" },
+    json: async () => ({ id: 1, username: "nuevo" }), text: async () => "{}",
+  };
+};
+caidInput.value = "1801,1861";
+modalForm.querySelector('input[name="name"]').value = "Cliente de prueba";
+modalForm.dispatchEvent(new window.Event("submit", { bubbles: true, cancelable: true }));
+await new Promise((resolve) => setTimeout(resolve, 100));
+check("el alta envía caid_allow", sentLine !== null && sentLine.caid_allow === "1801,1861");
+
 console.log(failures.length ? `\n${failures.length} fallo(s)` : "\nfrontend OK");
 process.exit(failures.length ? 1 : 0);

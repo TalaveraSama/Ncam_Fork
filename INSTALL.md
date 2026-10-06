@@ -116,6 +116,12 @@ Detalles que conviene saber:
 
 ## B. Daemon NCam-NG (desde el código)
 
+> Para la configuración del daemon (lectores, caché, permisos por CAID), tienes la
+> guía **[docs/configuracion-optima.md](docs/configuracion-optima.md)** y los ficheros
+> de ejemplo en `examples/` (también en el servidor, en
+> `/usr/share/doc/ncam-ng/examples/optimo/`).
+
+
 ### 1. Dependencias
 
 ```bash

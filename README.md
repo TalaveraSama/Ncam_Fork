@@ -12,7 +12,9 @@ principales:
    métricas — integrado con el motor de caché del daemon.
 
 > **Documentación:** [INSTALL.md](INSTALL.md) (instalación) ·
-> [docs/ajustes.md](docs/ajustes.md) (guía de configuración, campo por campo) ·
+> [docs/configuracion-optima.md](docs/configuracion-optima.md) (configuración óptima
+> de NCam: caché, lectores y permisos por CAID) ·
+> [docs/ajustes.md](docs/ajustes.md) (guía de NCPanel, campo por campo) ·
 > [docs/cache-engine.md](docs/cache-engine.md) (motor de caché)
 
 > **Releases:** <https://github.com/TalaveraSama/Ncam_Fork/releases> — paquetes
@@ -202,6 +204,7 @@ documentación de configuración clásica.
 ├── webif/cache/cache.html          # página del motor de caché del WebIf
 ├── devtools/cache-engine-test.c    # banco de pruebas del motor de caché
 ├── devtools/run-cache-test.sh
+├── examples/ncam.conf              # configuración óptima de ejemplo (ncam.server/ncam.user)
 ├── devtools/build-deb.sh           # construye los paquetes .deb
 ├── devtools/install-deb.sh         # descarga e instala los .deb de una release
 ├── packaging/ncam-ng-ctl.sh        # gestor de servicios (restart-ncam, status…)
@@ -209,6 +212,7 @@ documentación de configuración clásica.
 ├── .github/workflows/release.yml   # compila y publica los .deb al etiquetar v*
 ├── Distribution/doc/example/ncam.conf
 ├── docs/ajustes.md                 # guía de la pantalla Ajustes, campo por campo
+├── docs/configuracion-optima.md    # configuración óptima del daemon (3 CAID)
 ├── docs/cache-engine.md            # documentación técnica del motor v2
 └── panel/                          # NCPanel: panel de gestión (super admin / reseller)
     ├── backend/app/                # API FastAPI + SQLite

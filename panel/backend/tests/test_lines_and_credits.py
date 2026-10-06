@@ -231,3 +231,73 @@ def test_password_policy(client, admin_token):
         json={"username": "corta", "password": "1234", "role": "user"},
     )
     assert response.status_code == 422
+
+
+def test_line_caid_permissions_and_export(client, admin_token):
+    """El permiso por CAID de la línea llega al [account] generado."""
+    from app import db as database
+    from app import ncam
+
+    created = client.post(
+        "/api/v1/lines",
+        headers=auth_headers(admin_token),
+        json={"name": "Cliente solo 1801", "protocol": "cccam", "caid_allow": " b00 , 1801 "},
+    )
+    assert created.status_code == 201, created.text
+    line = created.json()
+    # se normaliza al guardar (mayúsculas, sin espacios)
+    assert line["caid_allow"] == "0B00,1801"
+
+    # el bloque [account] escribe la línea caid = ...
+    with database.session() as conn:
+        row = database.query_one(conn, "SELECT * FROM lines WHERE id = ?", (line["id"],))
+        block = ncam.render_account_config(row)
+    assert "caid" in block and "= 0B00,1801" in block, block
+
+    # al vaciarlo, el usuario no tiene restricción (no se escribe caid)
+    updated = client.patch(
+        f"/api/v1/lines/{line['id']}", headers=auth_headers(admin_token), json={"caid_allow": ""}
+    )
+    assert updated.status_code == 200, updated.text
+    with database.session() as conn:
+        row = database.query_one(conn, "SELECT * FROM lines WHERE id = ?", (line["id"],))
+        assert row["caid_allow"] is None
+        assert "caid " not in ncam.render_account_config(row).replace("cccmaxhops", "")
+
+    # los saltos CCcam son un campo propio (no dependen de "conexiones máximas")
+    hops = client.patch(
+        f"/api/v1/lines/{line['id']}", headers=auth_headers(admin_token), json={"cccmaxhops": 6}
+    )
+    assert hops.status_code == 200, hops.text
+    assert hops.json()["cccmaxhops"] == 6
+    with database.session() as conn:
+        row = database.query_one(conn, "SELECT * FROM lines WHERE id = ?", (line["id"],))
+        block = ncam.render_account_config(row)
+    assert "= 6" in block and "cccmaxhops" in block, block
+
+    # conexiones simultáneas: se exporta max_connections (no cccmaxhops)
+    conns = client.patch(
+        f"/api/v1/lines/{line['id']}", headers=auth_headers(admin_token),
+        json={"max_connections": 3, "cccmaxhops": 1},
+    )
+    assert conns.status_code == 200, conns.text
+    with database.session() as conn:
+        row = database.query_one(conn, "SELECT * FROM lines WHERE id = ?", (line["id"],))
+        block = ncam.render_account_config(row)
+    assert "max_connections" in block and "= 3" in block, block
+    assert "cccmaxhops" in block and "= 1" in block, block
+    # con una sola conexión no se escribe la línea (es el valor por defecto)
+    single = client.patch(
+        f"/api/v1/lines/{line['id']}", headers=auth_headers(admin_token), json={"max_connections": 1}
+    )
+    assert single.status_code == 200
+    with database.session() as conn:
+        row = database.query_one(conn, "SELECT * FROM lines WHERE id = ?", (line["id"],))
+        assert "max_connections" not in ncam.render_account_config(row)
+
+    # un CAID inventado se rechaza con un mensaje claro
+    bad = client.patch(
+        f"/api/v1/lines/{line['id']}", headers=auth_headers(admin_token), json={"caid_allow": "1801,ZZZZ"}
+    )
+    assert bad.status_code == 422
+    assert "CAID no válido" in bad.json()["detail"]

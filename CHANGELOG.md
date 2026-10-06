@@ -1,5 +1,47 @@
 # Changelog
 
+## [2.3.0] - 2026-10-06 — configuración óptima y permisos por CAID
+
+### Configuración óptima para 3 CAID (1801, 1861, 0B00)
+
+* Nueva guía **[docs/configuracion-optima.md](docs/configuracion-optima.md)**: cómo
+  dejar NCam lo más rápido posible guardando **todas** las respuestas de los
+  lectores en el motor de caché, con explicación de cada ajuste de `[global]`,
+  `[cache]`, `[cccam]` y `[newcamd]`, la puesta en marcha en 5 minutos, la
+  verificación del ratio de aciertos y una tabla de problemas frecuentes.
+* Nuevos ficheros de ejemplo listos para copiar:
+  [`examples/ncam.conf`](examples/ncam.conf),
+  [`examples/ncam.server`](examples/ncam.server) (lector CCcam y lector Newcamd,
+  tarjeta local y peer de cachex) y [`examples/ncam.user`](examples/ncam.user).
+  Se instalan en `/usr/share/doc/ncam-ng/examples/optimo/` y se adjuntan a la
+  release.
+* Valores clave recomendados: `preferlocalcards = 2`, `fallbacktimeout = 2000`,
+  `dropdups = 1`, `nice = -10`, `disablecrccws = 1`; y en `[cache]`:
+  `max_time = 15`, `max_entries = 0` (sin límite, expira por tiempo),
+  `max_hit_time = 15`, `cacheexenablestats = 1`. El `ncam.conf` que instala el
+  paquete también estrena la caché sin límite y las estadísticas activadas.
+
+### Permisos por CAID de los usuarios (NCPanel)
+
+* El campo **CAIDs permitidos** de cada línea ya se aplica: se escribe como
+  `caid = …` en el bloque `[account]` que el panel genera para `ncam.user`
+  (`1801` = solo ese CAID; `1801,1861,0B00` = los tres; vacío = sin restricción).
+  Antes el panel guardaba ese dato pero no lo exportaba, así que todos los
+  clientes veían todos los CAID.
+* El formulario de línea incorpora el campo (con botones rápidos 1801 / 1861 /
+  0B00 / Todos) y la tabla muestra los CAID de cada línea; los valores se
+  normalizan (mayúsculas, sin espacios) y se validan: un CAID mal escrito se
+  rechaza con un mensaje claro en vez de llegar así al daemon.
+* Con `caid` restringido, el daemon rechaza el ECM de otro CAID en el acto
+  (`invalid caid 0x…`) sin molestar al proveedor.
+* El campo **Conexiones máximas** ahora se exporta como `max_connections` del
+  `[account]` (el ajuste real de NCam para conexiones simultáneas), que antes no
+  se escribía nunca.
+* Nuevo campo **Saltos CCcam** (`cccmaxhops`) por línea, con `1` por defecto:
+  antes ese valor se deducía del campo "conexiones máximas" (que no tiene nada
+  que ver), así que ahora se controla a propósito cuántos saltos ve cada cliente
+  (`-1` = ninguna tarjeta, `1` = solo las directas, más para revendedores).
+
 ## [2.2.1] - 2026-10-06 — guía de la pantalla Ajustes
 
 * Nuevo documento **[docs/ajustes.md](docs/ajustes.md)**: explica *campo por campo*

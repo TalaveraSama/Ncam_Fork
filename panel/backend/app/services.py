@@ -23,6 +23,7 @@ from typing import Any, Iterable, Optional
 from fastapi import HTTPException, status
 
 from . import db as database
+from . import ncam
 from .config import settings
 from .security import AuthContext, ROLE_RESELLER, ROLE_SUPER_ADMIN, ROLE_USER, check_password_policy, hash_password
 
@@ -359,8 +360,14 @@ def rotate_api_key(conn: sqlite3.Connection, ctx: AuthContext, account_id: int) 
     return raw, prefix
 
 
-# ---------------------------------------------------------------------------
-# líneas
+def _clean_caids(value: Any) -> Optional[str]:
+    """Valida los CAID permitidos de una línea (los que pondrá en ncam.user)."""
+    try:
+        return ncam.normalize_caids(value) or None
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+
+
 # ---------------------------------------------------------------------------
 def list_lines(
     conn: sqlite3.Connection,
@@ -465,8 +472,9 @@ def create_line(conn: sqlite3.Connection, ctx: AuthContext, payload: dict[str, A
             "username": username,
             "password": payload.get("password") or generated_pwd,
             "group_name": str(payload.get("group_name") or settings.default_group),
-            "caid_allow": payload.get("caid_allow"),
+            "caid_allow": _clean_caids(payload.get("caid_allow")),
             "max_connections": int(payload.get("max_connections") or 1),
+            "cccmaxhops": int(payload.get("cccmaxhops", 1)),
             "expires_at": expires_at,
             "status": "active",
             "cacheex_mode": int(payload.get("cacheex_mode") or 0),
@@ -498,6 +506,7 @@ def update_line(conn: sqlite3.Connection, ctx: AuthContext, line_id: int, payloa
         "group_name",
         "caid_allow",
         "max_connections",
+        "cccmaxhops",
         "status",
         "cacheex_mode",
         "cacheex_maxhop",
@@ -508,6 +517,9 @@ def update_line(conn: sqlite3.Connection, ctx: AuthContext, line_id: int, payloa
         "notes",
     )
     values = {key: payload[key] for key in allowed if key in payload and payload[key] is not None}
+    if "caid_allow" in payload:
+        # se permite vaciarlo ("" o None) para quitar la restricción de CAID
+        values["caid_allow"] = _clean_caids(payload.get("caid_allow"))
     if not values:
         return line
 

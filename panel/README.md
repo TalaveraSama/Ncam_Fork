@@ -88,6 +88,28 @@ PYTHONPATH=backend python3 -m app.seed --username admin --reset-password
 ### Usuario final
 * Solo lectura: sus líneas (credenciales, caducidad, estado) y su saldo.
 
+### Permisos por CAID de cada línea
+Cada línea tiene el campo **CAIDs permitidos**, que se exporta como la línea
+`caid = …` del bloque `[account]` en `ncam.user`:
+
+| Valor en el panel | Efecto en el daemon |
+| --- | --- |
+| vacío | sin restricción: el cliente ve todos los CAID de sus grupos |
+| `1801` | solo ese CAID (`invalid caid` para el resto) |
+| `1801,1861,0B00` | los tres |
+
+Se normaliza y valida al guardar (`1801`, `1801&FFFF`, `1861:01`, separados por
+comas; los CAID inválidos se rechazan con `422`). La tabla de líneas muestra los
+CAID de cada una bajo el protocolo.
+
+Cada línea tiene además:
+
+* **Conexiones máximas** → `max_connections = N` del `[account]`: conexiones
+  simultáneas que admite esa cuenta (`1` por defecto).
+* **Saltos CCcam** (`cccmaxhops`, por defecto `1`) → cuántos saltos de tarjeta ve
+  el cliente. `1` = solo tus tarjetas directas; `-1` = el cliente no ve ninguna
+  tarjeta (bloqueo); valores mayores para revendedores.
+
 ## 3. API REST (resumen)
 
 Autenticación (`/api/v1/auth`)

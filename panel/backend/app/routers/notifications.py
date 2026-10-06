@@ -114,7 +114,7 @@ def send_test(
     """Envía un mensaje de prueba por el canal indicado (solo super admin)."""
     conf = notifications.notification_settings(conn)
     subject = f"[{conf['panel_name']}] Mensaje de prueba"
-    body = "Aviso de prueba enviado desde el panel NCam-NG. La configuración funciona."
+    body = "Aviso de prueba enviado desde NCPanel. La configuración funciona."
 
     target = (payload.target or "").strip()
     if payload.channel == "email":

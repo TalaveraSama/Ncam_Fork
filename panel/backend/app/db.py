@@ -17,7 +17,7 @@ from typing import Any, Iterable, Iterator, Optional
 from .config import settings
 
 
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 
 SCHEMA = """
 PRAGMA journal_mode = WAL;
@@ -62,6 +62,7 @@ CREATE TABLE IF NOT EXISTS lines (
     group_name        TEXT    NOT NULL DEFAULT '1',
     caid_allow        TEXT,
     max_connections   INTEGER NOT NULL DEFAULT 1,
+    cccmaxhops        INTEGER NOT NULL DEFAULT 1,        -- saltos CCcam que ve el cliente
     expires_at        TEXT,
     status            TEXT    NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'suspended')),
     cacheex_mode      INTEGER NOT NULL DEFAULT 0,
@@ -308,6 +309,12 @@ def _migrate(conn: sqlite3.Connection, from_version: int) -> None:
         ):
             if column not in line_columns:
                 conn.execute(ddl)
+    if from_version < 5:
+        # saltos CCcam que ve el cliente: hasta ahora el panel los deducía de
+        # "conexiones máximas"; con el valor por defecto (1) el comportamiento
+        # de las líneas ya creadas no cambia
+        if "cccmaxhops" not in line_columns:
+            conn.execute("ALTER TABLE lines ADD COLUMN cccmaxhops INTEGER NOT NULL DEFAULT 1")
 
 
 DEFAULT_SETTINGS = {

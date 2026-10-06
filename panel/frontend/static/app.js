@@ -420,7 +420,7 @@ async function viewLines(el) {
       return `<tr>
         <td><strong>${esc(line.name)}</strong><div class="hint">${esc(line.group_name ? `grupo ${line.group_name}` : "")}</div></td>
         <td><code>${esc(line.username)}</code></td>
-        <td>${esc(line.protocol)}</td>
+        <td>${esc(line.protocol)}${line.caid_allow ? `<div class="hint">CAID ${esc(line.caid_allow)}</div>` : ""}</td>
         <td>${esc(line.owner_username || "—")}</td>
         <td class="nowrap">${fmtDate(line.expires_at)}${left !== null ? `<div class="hint">${left >= 0 ? `${left} días` : "caducada"}</div>` : ""}</td>
         <td>${statusBadge(line.effective_status)}</td>
@@ -519,7 +519,28 @@ function openLineForm(owners, onDone, line = null) {
     <div class="row">
       <label>Grupo NCam<input name="group_name" value="${esc(line?.group_name || "1")}"></label>
       <label>Conexiones máximas<input type="number" name="max_connections" min="1" max="64" value="${line?.max_connections || 1}"></label>
+      <label>Saltos CCcam (cccmaxhops)
+        <input type="number" name="cccmaxhops" min="-1" max="10" value="${line?.cccmaxhops ?? 1}">
+        <span class="hint">1 = solo tus tarjetas directas; súbelo si el cliente revende</span>
+      </label>
     </div>
+    <div class="row">
+      <label>CAIDs permitidos (vacío = todos)
+        <input name="caid_allow" id="line-caid" maxlength="128" value="${esc(line?.caid_allow || "")}"
+          placeholder="1801,1861,0B00">
+      </label>
+      <label>Poner/quitar rápido
+        <span class="caid-quick">
+          <button type="button" class="btn ghost small" data-caid="1801">1801</button>
+          <button type="button" class="btn ghost small" data-caid="1861">1861</button>
+          <button type="button" class="btn ghost small" data-caid="0B00">0B00</button>
+          <button type="button" class="btn ghost small" data-caid="">Todos</button>
+        </span>
+      </label>
+    </div>
+    <p class="hint">Se escribe como <code>caid = …</code> en el bloque <code>[account]</code> del ncam.user:
+      el cliente solo podrá ver esos CAID (<code>1801</code> = uno solo; <code>1801,1861,0B00</code> = los tres;
+      vacío = sin restricción).</p>
     <div class="row">
       <label>CacheEx (0 = off)<input type="number" name="cacheex_mode" min="0" max="3" value="${line?.cacheex_mode ?? 0}"></label>
       <label>CacheEx maxhop<input type="number" name="cacheex_maxhop" min="0" max="10" value="${line?.cacheex_maxhop ?? 0}"></label>
@@ -547,7 +568,9 @@ function openLineForm(owners, onDone, line = null) {
         const payload = {
           name: data.name, protocol: data.protocol, group_name: data.group_name,
           max_connections: Number(data.max_connections), cacheex_mode: Number(data.cacheex_mode),
+          cccmaxhops: Number(data.cccmaxhops),
           cacheex_maxhop: Number(data.cacheex_maxhop), notes: data.notes || null, status: data.status,
+          caid_allow: (data.caid_allow || "").trim(),
           notify_email: data.notify_email || null, notify_telegram: data.notify_telegram || null,
           notify_days: Number(data.notify_days || 0),
         };
@@ -557,8 +580,10 @@ function openLineForm(owners, onDone, line = null) {
         const payload = {
           name: data.name, protocol: data.protocol, group_name: data.group_name,
           max_connections: Number(data.max_connections), cacheex_mode: Number(data.cacheex_mode),
+          cccmaxhops: Number(data.cccmaxhops),
           cacheex_maxhop: Number(data.cacheex_maxhop), days: Number(data.days || 30),
           notes: data.notes || null,
+          caid_allow: (data.caid_allow || "").trim(),
           notify_email: data.notify_email || null, notify_telegram: data.notify_telegram || null,
           notify_days: Number(data.notify_days || 0),
         };
@@ -572,6 +597,23 @@ function openLineForm(owners, onDone, line = null) {
       return false;
     },
   });
+
+  // botones rápidos de CAID: añaden o quitan valores del campo
+  const caidInput = $("#line-caid");
+  if (caidInput) {
+    $$("button[data-caid]", $("#modal-root")).forEach((button) => {
+      button.onclick = () => {
+        const value = button.dataset.caid;
+        if (!value) { caidInput.value = ""; return; }
+        const current = caidInput.value.split(",").map((item) => item.trim().toUpperCase()).filter(Boolean);
+        const index = current.indexOf(value);
+        if (index >= 0) current.splice(index, 1); else current.push(value);
+        const order = ["1801", "1861", "0B00"];
+        current.sort((a, b) => ((order.indexOf(a) + 1 || 99) - (order.indexOf(b) + 1 || 99)) || a.localeCompare(b));
+        caidInput.value = current.join(",");
+      };
+    });
+  }
 }
 
 function openExportDialog(line) {

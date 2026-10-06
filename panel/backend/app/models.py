@@ -96,6 +96,7 @@ class LineCreate(BaseModel):
     group_name: str = Field(default="1", max_length=64)
     caid_allow: Optional[str] = Field(default=None, max_length=128)
     max_connections: int = Field(default=1, ge=1, le=64)
+    cccmaxhops: int = Field(default=1, ge=-1, le=10)
     days: int = Field(default=30, ge=1, le=3650)
     owner_id: Optional[int] = None
     cacheex_mode: int = Field(default=0, ge=0, le=3)
@@ -124,6 +125,7 @@ class LineUpdate(BaseModel):
     group_name: Optional[str] = Field(default=None, max_length=64)
     caid_allow: Optional[str] = Field(default=None, max_length=128)
     max_connections: Optional[int] = Field(default=None, ge=1, le=64)
+    cccmaxhops: Optional[int] = Field(default=None, ge=-1, le=10)
     status: Optional[Literal["active", "suspended"]] = None
     cacheex_mode: Optional[int] = Field(default=None, ge=0, le=3)
     cacheex_maxhop: Optional[int] = Field(default=None, ge=0, le=10)
