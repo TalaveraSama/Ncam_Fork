@@ -1,5 +1,26 @@
 # Changelog
 
+## [2.4.6] - 2026-10-07 — «activo pero sin respuesta»: el diagnóstico que faltaba
+
+* **Arreglado un fallo sutil que desincronizaba la herramienta y el panel.** Si el
+  `.env` define `NCAM_PANEL_PORT` dos veces (típico al añadir una línea con `nano`
+  sin borrar la anterior), el panel arranca con la **primera** —así lo leen
+  `run.sh` y `config.py`— mientras `ncam-ng-ctl panel port` usaba la última: la
+  herramienta hablaba del puerto 8090, el panel escuchaba en 8080 y el reinicio
+  terminaba en «panel: sin respuesta en /api/v1/health (HTTP 000)». Ahora lee la
+  misma que el panel y, si la clave está repetida, lo avisa.
+* `ncam-ng-ctl panel port` además avisa si la línea lleva un **comentario detrás**
+  (se toma como parte del valor y el servicio no arranca), si el valor no es un
+  puerto válido, y muestra **dónde escucha de verdad** (`127.0.0.1:8090
+  [python, pid N]`), no solo lo que dice el `.env`.
+* **`restart-ncam-panel` ya no se queda en «sin respuesta».** Cuando el panel está
+  activo pero no contesta, imprime los últimos mensajes del servicio y qué hay
+  escuchando en el puerto del `.env` (y en 8080), que es lo que permite ver si el
+  panel está en otro puerto o si el puerto lo ocupa otra cosa.
+* Aviso cuando la unidad está `disabled`/`masked`: «arranca ahora, pero NO lo hará
+  solo al reiniciar el servidor», con el `sudo systemctl enable` para arreglarlo.
+* Pruebas: 3 nuevas del instalador (71 en total).
+
 ## [2.4.5] - 2026-10-07 — cambiar el puerto del panel de verdad
 
 * **Arreglado: `NCAM_PANEL_PORT` del `.env` no cambiaba nada.** La unidad systemd

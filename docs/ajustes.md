@@ -265,7 +265,7 @@ Después hay que reiniciar el panel: `sudo restart-ncam-panel`.
 
 | Variable | Por defecto | Para qué |
 | --- | --- | --- |
-| `NCAM_PANEL_HOST` / `NCAM_PANEL_PORT` | `0.0.0.0` / `8080` | En qué dirección y puerto escucha el panel. El puerto se cambia con `sudo ncam-ng-ctl panel port NUEVO` (o editando esta línea y `restart-ncam-panel`). |
+| `NCAM_PANEL_HOST` / `NCAM_PANEL_PORT` | `0.0.0.0` / `8080` | En qué dirección y puerto escucha el panel. El puerto se cambia con `sudo ncam-ng-ctl panel port NUEVO` (o editando esta línea y `restart-ncam-panel`). Cada clave **una sola vez** y sin comentario detrás: si está repetida manda la primera; un `#` al final se toma como parte del valor. |
 | `NCAM_PANEL_SECRET` | generado al instalar | Clave que firma los tokens de sesión. Si la cambias, se cierran todas las sesiones. |
 | `NCAM_PANEL_DB` | `/var/lib/ncam-ng-panel/panel.db` | Ruta de la base de datos SQLite. |
 | `NCAM_PANEL_CACHE_POLL` / `NCAM_PANEL_CACHE_POLL_INTERVAL` | `1` / `60` | Muestreo automático del histórico y cada cuántos segundos (luego se puede apagar desde Ajustes con *Muestreo automático*). |
@@ -347,6 +347,7 @@ de los avisos.
 | Los avisos no llegan | Revisa que `notify.enabled` = `1` **y** el canal = `1`; usa *Probar*; mira el historial (ahí está el error del SMTP/Telegram). Gmail necesita contraseña de aplicación y puerto 587. |
 | El consumo de ECM no sube | La línea tiene que existir en el daemon (exportada y recargada) y haber servido ECM con OK. Pulsa *Medir ahora* en **Consumo de ECM** y mira si `ecm_ok` aparece en el WebIf (`userstats`). |
 | Cambié el puerto del panel y ya no responde | Comprueba cuál está usando de verdad: `ncam-ng-ctl panel port`. Cámbialo con `sudo ncam-ng-ctl panel port NUEVO` (o edita `NCAM_PANEL_PORT` con `sudo ncam-ng-ctl config panel` y `sudo restart-ncam-panel`) y abre el puerto nuevo en el cortafuegos. Si el panel se publica por el túnel, actualiza también `cloudflared`. |
+| El panel sale «activo» pero no responde en su puerto | Mira primero dónde escucha de verdad (`ncam-ng-ctl panel port`): si el `.env` tiene `NCAM_PANEL_PORT` **repetida**, el panel usa la primera y la herramienta te lo avisa; si la línea lleva un comentario detrás, el valor incluye el `#` y el servicio no arranca. Con eso limpio, `sudo restart-ncam-panel`. El registro (`ncam-ng-ctl logs panel -n 30`) dice el motivo exacto si el puerto estaba ocupado. |
 | Quiero mover el panel a otro puerto (el 8080 está ocupado) | `sudo ncam-ng-ctl panel port 8090`: valida el número, avisa si el puerto está ocupado, lo escribe en el `.env` (con copia de seguridad), reinicia y comprueba que el panel responde en el nuevo. Si lo publicas por Cloudflare, apunta el túnel al puerto nuevo y `sudo systemctl restart cloudflared`. |
 | Un campo de contraseña muestra `***` | Es normal: significa que hay un valor guardado y que no se devuelve en claro. Escribe encima para cambiarlo o vacíalo para borrarlo. |
 | ¿Puedo editar `panel.db` con `nano`? | **No.** Es SQLite; editarlo a mano lo corrompe. Usa la interfaz o `sqlite3`. |

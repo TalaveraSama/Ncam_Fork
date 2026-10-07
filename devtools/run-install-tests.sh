@@ -279,6 +279,31 @@ else
 	echo "  [omitido] escritura real del .env (necesita root; ejecuta la suite con sudo)"
 fi
 
+# El panel arranca con la PRIMERA aparición de la clave (lo hacen run.sh y
+# config.py); si el .env la tiene dos veces, la herramienta tiene que decir la
+# misma que usará el panel, no la última.
+cat > "$tmp_cf/.env" <<'ENV'
+NCAM_PANEL_HOST=0.0.0.0
+NCAM_PANEL_PORT=8090
+NCAM_PANEL_SECRET=secreto-de-prueba
+NCAM_PANEL_PORT=8082
+ENV
+out="$(NCAM_PANEL_DIR="$tmp_cf" sh packaging/ncam-ng-ctl.sh --dry-run panel port 2>&1)"
+if printf '%s' "$out" | grep -q "puerto 8090" && printf '%s' "$out" | grep -q "hay 2 líneas"; then r=0; else r=1; fi
+check "panel port: con la clave repetida usa la primera y avisa" "$r"
+
+# un "#" al final de la línea se toma como parte del valor: hay que avisarlo
+printf 'NCAM_PANEL_PORT=8090  # panel\nNCAM_PANEL_SECRET=x\n' > "$tmp_cf/.env"
+out="$(NCAM_PANEL_DIR="$tmp_cf" sh packaging/ncam-ng-ctl.sh --dry-run panel port 2>&1)"
+if printf '%s' "$out" | grep -q "comentario detrás"; then r=0; else r=1; fi
+check "panel port: avisa si la línea lleva un comentario detrás" "$r"
+
+# con espacios delante de la clave (nano los deja a veces) sí hay que leerla
+printf '   NCAM_PANEL_PORT=8091\nNCAM_PANEL_SECRET=x\n' > "$tmp_cf/.env"
+out="$(NCAM_PANEL_DIR="$tmp_cf" sh packaging/ncam-ng-ctl.sh --dry-run panel port 2>&1)"
+if printf '%s' "$out" | grep -q "puerto 8091"; then r=0; else r=1; fi
+check "panel port: entiende la clave con espacios delante" "$r"
+
 rm -rf "$tmp_run" "$tmp_cf"
 
 echo "== cuentas del panel (ncam-ng-ctl admin) =="

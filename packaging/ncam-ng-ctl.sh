@@ -250,11 +250,48 @@ targets_for() {
 }
 
 panel_port() {
-	if [ -r "$PANEL_ENV" ]; then
-		p=$(sed -n 's/^NCAM_PANEL_PORT=[[:space:]]*//p' "$PANEL_ENV" | tail -n 1 | tr -d '"')
-		[ -n "$p" ] && { printf '%s' "$p"; return; }
+	# Ojo: tiene que devolver el MISMO puerto que usará el panel. Tanto run.sh (que
+	# recorre el .env y no sobreescribe lo ya visto) como config.py (os.environ.
+	# setdefault) se quedan con la PRIMERA aparición de la clave; si el .env tiene
+	# la clave dos veces, el panel usa la primera y aquí hay que hacer lo mismo.
+	p="$(env_first_value NCAM_PANEL_PORT)"
+	case "$p" in
+		''|*[!0-9]*) printf '%s' 8080 ;;          # valor raro: como config.py (_env_int)
+		*) if [ "$p" -ge 1 ] && [ "$p" -le 65535 ]; then printf '%s' "$p"; else printf '%s' 8080; fi ;;
+	esac
+}
+
+env_first_value() {   # env_first_value <clave> -> primer valor del .env, sin comillas
+	[ -r "$PANEL_ENV" ] || return 0
+	sed -n "s/^[[:space:]]*$1[[:space:]]*=[[:space:]]*//p" "$PANEL_ENV" | head -n 1 | tr -d '"\r'
+}
+
+env_key_count() {   # env_key_count <clave> -> cuántas líneas definen esa clave
+	[ -r "$PANEL_ENV" ] || { printf '%s' 0; return 0; }
+	grep -cE "^[[:space:]]*$1[[:space:]]*=" "$PANEL_ENV" 2>/dev/null || printf '%s' 0
+}
+
+env_has_inline_comment() {   # env_has_inline_comment <clave> -> 0 si hay un # al final
+	[ -r "$PANEL_ENV" ] || return 1
+	grep -qE "^[[:space:]]*$1[[:space:]]*=[^#]*#" "$PANEL_ENV" 2>/dev/null
+}
+
+warn_env_key() {   # warn_env_key <clave>: avisos sobre cómo está escrita la clave
+	key="$1"
+	n="$(env_key_count "$key")"
+	case "$n" in
+		''|0|1) ;;
+		*)
+			say "  AVISO: hay $n líneas de $key en $PANEL_ENV; el panel usa la PRIMERA."
+			say "         deja solo una con:  sudo ncam-ng-ctl config panel"
+			;;
+	esac
+	if env_has_inline_comment "$key"; then
+		say "  AVISO: la línea de $key lleva un comentario detrás y eso se toma como parte"
+		say "         del valor (los comentarios van en su propia línea). Corrígelo con:"
+		say "         sudo ncam-ng-ctl config panel"
 	fi
-	printf '%s' 8080
+	return 0
 }
 
 webif_port() {
@@ -496,6 +533,29 @@ port_in_use() {   # port_in_use <puerto> -> 0 si hay algo escuchando en él
 	fi
 }
 
+port_listen_line() {   # port_listen_line <puerto> -> línea de ss/netstat que escucha en él
+	if command -v ss >/dev/null 2>&1; then
+		ss -ltnp 2>/dev/null | awk -v p="$1" 'NR > 1 && $4 ~ "[:.]" p "$" { print }'
+	elif command -v netstat >/dev/null 2>&1; then
+		netstat -ltnp 2>/dev/null | awk -v p="$1" 'NR > 2 && $4 ~ "[:.]" p "$" { print }'
+	fi
+}
+
+listen_summary() {   # listen_summary <puerto> -> "127.0.0.1:8090  [python, pid 123]"
+	# Se prefiere la dirección local (127.0.0.1) sobre 0.0.0.0/* y sobre las IPs de
+	# otras interfaces: es la que usa el panel cuando va detrás de un proxy o túnel.
+	line=""
+	for patron in '^127\.0\.0\.1:' '^\[::1\]:' '^\*:' '^0\.0\.0\.0:'; do
+		line="$(port_listen_line "$1" | awk -v re="$patron" '$4 ~ re { print; exit }')"
+		[ -n "$line" ] && break
+	done
+	[ -n "$line" ] || line="$(port_listen_line "$1" | head -n 1)"
+	[ -n "$line" ] || return 1
+	addr="$(printf '%s\n' "$line" | awk '{ print $4 }')"
+	proc="$(printf '%s\n' "$line" | sed -n 's/.*users:((\"\([^\"]*\)\",pid=\([0-9]*\).*/\1, pid \2/p')"
+	printf '%s%s' "$addr" "${proc:+  [$proc]}"
+}
+
 port_owner() {   # port_owner <puerto> -> quién lo ocupa (para el aviso)
 	if command -v ss >/dev/null 2>&1; then
 		ss -ltnp 2>/dev/null | grep -E "[:.]$1[[:space:]]" || true
@@ -715,6 +775,14 @@ do_start_stop_restart() {
 		esac
 
 		if [ "$DRY" = "0" ] && [ "$what" != "stop" ]; then
+			# si la unidad está deshabilitada, con esto arranca ahora pero no tras un reinicio
+			enabled_state="$(systemctl is-enabled "$svc" 2>/dev/null || true)"
+			case "$enabled_state" in
+				disabled|masked)
+					say "    aviso: $svc está $enabled_state; arranca ahora, pero NO lo hará solo"
+					say "           al reiniciar el servidor. Actívalo con:  sudo systemctl enable $svc"
+					;;
+			esac
 			if wait_active "$svc" 15; then
 				say "    ok: $svc activo ($(systemctl show -p ActiveEnterTimestamp --value "$svc" 2>/dev/null || true))"
 			else
@@ -735,6 +803,18 @@ do_start_stop_restart() {
 			say "    panel:  http://TU_IP:$pp  (health ok)"
 		else
 			say "    panel:  sin respuesta en /api/v1/health (HTTP ${code:-000})"
+			if listen="$(listen_summary "$pp")"; then
+				say "    escucha: sí, en $listen"
+			else
+				say "    escucha: NADA en el puerto $pp: el panel usa otro puerto o no llegó a"
+				say "             arrancar. Comprueba el .env y el registro:"
+			fi
+			say "    --- últimos mensajes de $PANEL_SERVICE ---"
+			journalctl -u "$PANEL_SERVICE" -n 12 --no-pager 2>/dev/null | sed 's/^/    /' || true
+			say "    --- puertos en escucha del panel ---"
+			port_listen_line "8080" | sed 's/^/    /' || true
+			[ "$pp" != "8080" ] && { port_listen_line "$pp" | sed 's/^/    /' || true; }
+			say "    detalle:  ncam-ng-ctl panel port   ·   ncam-ng-ctl config panel"
 		fi
 	fi
 	if [ "$DRY" = "0" ] && [ "$what" != "stop" ] && service_present "$NCAM_SERVICE"; then
@@ -846,11 +926,31 @@ do_panel_port() {
 		say "Panel NCPanel (puerto $actual)"
 		say "========================="
 		say "  fichero:  $PANEL_ENV   (NCAM_PANEL_PORT)"
+		raw="$(env_first_value NCAM_PANEL_PORT)"
+		if [ -n "$raw" ] && ! valid_port "$raw"; then
+			say "  AVISO: NCAM_PANEL_PORT='$raw' no es un puerto válido: así el servicio no"
+			say "         arranca (run.sh lo rechaza). Corrígelo con:  sudo ncam-ng-ctl config panel"
+		fi
+		warn_env_key NCAM_PANEL_PORT
 		code="$(http_code_retry "http://127.0.0.1:$actual/api/v1/health" 3 || true)"
 		case "$code" in
 			200) say "  estado:   responde en http://127.0.0.1:$actual (ok)" ;;
 			*)   say "  estado:   sin respuesta en http://127.0.0.1:$actual/api/v1/health"
-			     say "            (¿está parado el servicio? ncam-ng-ctl logs panel -n 30)" ;;
+			     if listen="$(listen_summary "$actual")"; then
+				say "            pero algo SÍ escucha en $listen"
+			     else
+				say "            (¿está parado el servicio? ncam-ng-ctl logs panel -n 30)"
+			     fi ;;
+		esac
+		if listen="$(listen_summary "$actual")"; then
+			say "  escucha:  $listen"
+		fi
+		enabled_state="$(systemctl is-enabled "$PANEL_SERVICE" 2>/dev/null || true)"
+		case "$enabled_state" in
+			disabled|masked)
+				say "  servicio: $enabled_state (no arrancará solo al reiniciar el servidor:"
+				say "            sudo systemctl enable $PANEL_SERVICE)"
+				;;
 		esac
 		if [ "$(id -u)" = "0" ] && command -v ufw >/dev/null 2>&1; then
 			if ufw status 2>/dev/null | grep -qE "^$actual(/tcp)?\b"; then
@@ -901,6 +1001,9 @@ do_panel_port() {
 		else
 			say "    AVISO: no responde en el puerto $nuevo (HTTP ${code:-000}); últimos errores:"
 			journalctl -u "$PANEL_SERVICE" -n 15 --no-pager 2>/dev/null | sed 's/^/    /' || true
+			if listen="$(listen_summary "$nuevo")"; then
+				say "    escucha en: $listen"
+			fi
 			say "    vuelve al puerto anterior:  ncam-ng-ctl panel port $actual"
 		fi
 	fi
