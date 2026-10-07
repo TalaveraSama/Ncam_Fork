@@ -1,0 +1,11 @@
+# datos locales del panel (nunca se versionan)
+.env
+.secret_key
+backend/data/
+*.db
+*.db-wal
+*.db-shm
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/

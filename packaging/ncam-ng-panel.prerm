@@ -1,0 +1,9 @@
+#!/bin/sh
+# prerm del paquete ncam-ng-panel
+set -e
+if [ -z "${PKGROOT:-}" ] && command -v systemctl >/dev/null 2>&1; then
+	case "${1:-}" in
+		remove|deconfigure|upgrade) systemctl stop ncam-panel.service >/dev/null 2>&1 || true ;;
+	esac
+fi
+exit 0

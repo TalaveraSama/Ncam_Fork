@@ -1,0 +1,172 @@
+name: Release (.deb)
+
+# Publica una release con los paquetes .deb del daemon y del panel.
+#
+#   * al empujar una etiqueta:   git tag v2.0.0 && git push origin v2.0.0
+#   * o a mano desde la pestaña "Actions"  (Release (.deb) -> Run workflow)
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Versión sin la "v" (ej. 2.0.0)'
+        required: true
+        default: '2.0.0'
+
+permissions:
+  contents: write
+
+jobs:
+  deb:
+    # Ubuntu 22.04 a propósito: los binarios compilados en 24.04 piden una
+    # glibc más nueva y no arrancarían en Ubuntu 22.04 ni en Debian 12.
+    name: Paquetes .deb (amd64)
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Descargar el código
+        uses: actions/checkout@v4
+
+      - name: Dependencias
+        run: |
+          sudo apt-get -qq update
+          sudo apt-get -y install build-essential python3-pip python3-venv
+          # pip reciente: "pip download --python-version" lo usa build-deb.sh para
+          # traer dependencias de varias versiones de Python
+          python3 -m pip install -q --upgrade pip
+
+      - name: Versión
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION="${{ github.event.inputs.version }}"
+          else
+            VERSION="${GITHUB_REF_NAME#v}"
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
+          echo "==> versión: $VERSION"
+
+      - name: Pruebas del motor de caché
+        run: sh devtools/run-cache-test.sh
+
+      - name: Pruebas del panel
+        run: |
+          python3 -m venv /tmp/testsenv
+          /tmp/testsenv/bin/pip install -q -r panel/requirements.txt httpx pytest
+          cd panel/backend && /tmp/testsenv/bin/python -m pytest -q
+
+      - name: Comprobaciones de los instaladores
+        run: sh devtools/run-install-tests.sh
+
+      - name: Pruebas del frontend (jsdom)
+        run: sh devtools/run-frontend-tests.sh
+
+      - name: Configurar y compilar
+        run: |
+          # ojo: "./config.sh" sin argumentos imprime la ayuda y termina con
+          # error; hay que pasarle al menos una opción. Con --enable
+          # WITH_SOFTCAM se mantiene la configuración por defecto del proyecto
+          # (módulos, lectores y el SoftCam.Key integrado).
+          #
+          # Cada paso se guarda en un log y, si falla, las últimas líneas se
+          # publican como anotación: así el motivo se ve desde la lista de
+          # ejecuciones sin tener que descargar el log completo.
+          run_logged() {
+            set +e
+            "$@" > /tmp/paso.log 2>&1
+            code=$?
+            set -e
+            tail -n 5 /tmp/paso.log
+            if [ $code -ne 0 ]; then
+              resumen=$(grep -iE "error|no such file|undefined" /tmp/paso.log | head -n 5; tail -n 3 /tmp/paso.log)
+              detail=$(printf '%s' "$resumen" | sed 's/%/%25/g' | tr '\n' '~' | sed 's/~/%0A/g')
+              echo "::error title=Fallo ($1)::$detail"
+            fi
+            return $code
+          }
+
+          run_logged ./config.sh --enable WITH_SOFTCAM
+          run_logged make -j"$(nproc)"
+
+      - name: Comprobar el binario
+        run: |
+          BIN=$(ls -1t Distribution/ncam-Unofficial-*-x86_64-linux-gnu | grep -v '\.debug$' | head -n1)
+          echo "binario: $BIN"
+          readelf -d "$BIN" | grep NEEDED || true
+          "$BIN" -V
+
+      - name: Construir los .deb
+        run: |
+          sh devtools/build-deb.sh --no-build \
+            --version "${{ steps.version.outputs.version }}" \
+            --arch amd64 --with-wheels --wheels-python "3.10 3.11 3.12"
+          cd dist && sha256sum ./*.deb > SHA256SUMS
+          ls -la .
+
+      - name: Guardar los .deb como artefactos
+        uses: actions/upload-artifact@v4
+        with:
+          name: ncam-ng-deb-${{ steps.version.outputs.version }}
+          path: |
+            dist/*.deb
+            dist/SHA256SUMS
+          if-no-files-found: error
+
+      - name: Publicar la release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: NCam-NG ${{ steps.version.outputs.version }}
+          generate_release_notes: true
+          body: |
+            Paquetes **.deb** de NCam-NG (daemon) y **NCPanel** (panel de gestión) para amd64 (Debian/Ubuntu):
+
+            | Paquete | Contenido |
+            |---|---|
+            | `ncam-ng_${{ steps.version.outputs.version }}_amd64.deb` | Daemon con el motor de caché v2, `/etc/ncam/ncam.conf` y el servicio systemd `ncam` |
+            | `ncam-ng-panel_${{ steps.version.outputs.version }}_amd64.deb` | **NCPanel**: panel web (super admin / reseller), servicio systemd `ncam-panel` |
+
+            Compilados en Ubuntu 22.04 (glibc 2.34): funcionan en **Ubuntu 22.04/24.04 y Debian 12/13**.
+            El daemon incluye el motor de caché v2 y la configuración por defecto de `config.sh` (SoftCam.Key integrado).
+
+            ## Instalación
+
+            ```bash
+            curl -fsSL -o install-deb.sh \
+              https://github.com/${{ github.repository }}/releases/latest/download/install-deb.sh
+            sudo sh install-deb.sh
+            ```
+
+            O instalando los adjuntos a mano:
+
+            ```bash
+            sudo apt install ./ncam-ng_${{ steps.version.outputs.version }}_amd64.deb \
+                             ./ncam-ng-panel_${{ steps.version.outputs.version }}_amd64.deb
+            ```
+
+            Los `.deb` se comprueban con `SHA256SUMS` (el instalador lo verifica solo):
+
+            ```bash
+            sha256sum -c SHA256SUMS
+            ```
+
+            Guía completa: [INSTALL.md](https://github.com/${{ github.repository }}/blob/${{ steps.version.outputs.tag }}/INSTALL.md)
+
+            Configuración óptima del daemon (3 CAID, caché y permisos): [docs/configuracion-optima.md](https://github.com/${{ github.repository }}/blob/${{ steps.version.outputs.tag }}/docs/configuracion-optima.md)
+
+            Configuración del panel (campo por campo): [docs/ajustes.md](https://github.com/${{ github.repository }}/blob/${{ steps.version.outputs.tag }}/docs/ajustes.md)
+            (también adjunta a esta release y en el servidor, en `/opt/ncam-ng-panel/docs/ajustes.md`).
+          files: |
+            dist/*.deb
+            dist/SHA256SUMS
+            devtools/install-deb.sh
+            INSTALL.md
+            docs/ajustes.md
+            docs/configuracion-optima.md
+            docs/administradores.md
+            docs/panel-sin-exponer-ip.md
+            examples/ncam.conf
+            examples/ncam.server
+            examples/ncam.user

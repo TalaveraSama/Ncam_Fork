@@ -1,0 +1,9 @@
+#!/bin/sh
+# prerm del paquete ncam-ng: detiene el servicio antes de desinstalar/actualizar
+set -e
+if [ -z "${PKGROOT:-}" ] && command -v systemctl >/dev/null 2>&1; then
+	case "${1:-}" in
+		remove|deconfigure|upgrade) systemctl stop ncam.service >/dev/null 2>&1 || true ;;
+	esac
+fi
+exit 0

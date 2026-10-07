@@ -1,0 +1,64 @@
+name: Build
+on:
+  push:
+#    branches: [ master ]
+  workflow_dispatch:
+    inputs:
+      config:
+        description: 'Configuration (config.sh [parameters])'
+        required: true
+        default: '--disable WITH_SOFTCAM'
+      use:
+        description: 'Use flags'
+        required: true
+        default: 'USE_LIBCRYPTO=1 USE_SSL=1 USE_LIBCURL=1 USE_LIBUSB=1 USE_PCSC=1'
+jobs:
+  build:
+    name: x86_64
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Install dependencies
+        run: |
+          sudo add-apt-repository -y ppa:ubuntu-toolchain-r/test
+          sudo apt-get -q update
+          sudo apt-get install openssl libcurl4-openssl-dev libusb-1.0-0-dev libpcsclite-dev
+      - name: Build libdvbcsa
+        run: |
+          git clone https://github.com/oe-mirrors/libdvbcsa.git
+          cd libdvbcsa && ./bootstrap && ./configure --disable-shared --enable-static --enable-avx2 && make && sudo make install
+          echo
+          echo -e "\033[1mTest:\033[m"
+          cd test
+          ./benchbitslice
+          ./benchbitsliceks
+          ./benchdec
+          ./benchenc
+          ./benchks
+          ./testbitslice
+          ./testbsops
+          ./testdec
+          ./testenc
+      - name: Configuration
+        run: |
+          if [ ${{ github.event_name }} == 'workflow_dispatch' ]; then
+            ${{github.workspace}}/config.sh ${{ github.event.inputs.config }}
+          else
+            ${{github.workspace}}/config.sh --enable MODULE_STREAMRELAY --disable WITH_SOFTCAM
+          fi
+      - name: Build
+        run: |
+          if [ ${{ github.event_name }} == 'workflow_dispatch' ]; then
+            make ${{ github.event.inputs.use }}
+          else
+            make USE_LIBCURL=1 USE_LIBUSB=1 EXTRA_CFLAGS="-DOPENSSL_API_COMPAT=0x10101000L -DWITH_SENDCMD"
+          fi
+      - name: Test
+        run: |
+          echo
+          echo -e "\033[1mNCam library dependencies:\033[m"
+          readelf -d ${{github.workspace}}/Distribution/ncam*debug | grep NEEDED | awk '{print $3" "$4" "$5}'
+          echo
+          echo -e "\033[1mNCam binary configuration and version:\033[m"
+          ${{github.workspace}}/Distribution/ncam*debug -V

@@ -1,0 +1,27 @@
+##TPLJSONHEADER##
+	"cachestats": {
+		"engine":"NCam-NG cache engine",
+		"max_entries":"##CACHE_MAX_ENTRIES##",
+		"max_time":"##CACHE_MAX_TIME##",
+		"entries":"##CACHE_ENTRIES##",
+		"cw_entries":"##CACHE_CW_ENTRIES##",
+		"mem_bytes":"##CACHE_MEM_BYTES##",
+		"lookups":"##CACHE_LOOKUPS##",
+		"hits":"##CACHE_HITS##",
+		"misses":"##CACHE_MISSES##",
+		"hit_ratio":"##CACHE_HITRATIO##",
+		"cw_new":"##CACHE_CW_NEW##",
+		"cw_upd":"##CACHE_CW_UPD##",
+		"cwc_rejected":"##CACHE_CWC_REJECTED##",
+		"evicted_ttl":"##CACHE_EVICTED_TTL##",
+		"evicted_lru":"##CACHE_EVICTED_LRU##",
+		"cw_cache":{
+			"entries":"##CACHE_CWCACHE_ENTRIES##",
+			"mem_bytes":"##CACHE_CWCACHE_MEM##",
+			"localgenerated":"##CACHE_CWCACHE_LG##"
+		},
+		"hot_entries":[
+			##CACHE_HOT_ENTRIES##
+		]
+	}
+##TPLJSONFOOTER##

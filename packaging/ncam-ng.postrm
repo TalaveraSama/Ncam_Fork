@@ -1,0 +1,12 @@
+#!/bin/sh
+# postrm del paquete ncam-ng: al desinstalar del todo, quita el servicio
+set -e
+if [ -z "${PKGROOT:-}" ] && command -v systemctl >/dev/null 2>&1; then
+	case "${1:-}" in
+		purge|remove)
+			systemctl disable ncam.service >/dev/null 2>&1 || true
+			systemctl daemon-reload >/dev/null 2>&1 || true
+			;;
+	esac
+fi
+exit 0

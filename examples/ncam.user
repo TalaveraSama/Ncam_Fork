@@ -1,0 +1,134 @@
+# =============================================================================
+#  NCam-NG :: ncam.user  —  USUARIOS (tus clientes / revendedores)
+# =============================================================================
+#
+#  EL PERMISO POR CAID SE PONE AQUÍ, en la línea `caid =` de cada [account]:
+#
+#    caid = 1801,1861,0B00   → ese usuario puede ver los TRES CAID
+#    caid = 1801             → solo el CAID 1801
+#    caid = 0B00             → solo el CAID 0B00
+#    (sin línea caid)        → todos los CAID de sus grupos = "sin restricción"
+#
+#  Si el usuario pide un CAID que no tiene permitido, NCam lo rechaza con
+#  "invalid caid 0xXXXX" (código E2_CAID) y no se molesta al proveedor.
+#
+#  `group` = qué lectores puede usar (los mismos números que en ncam.server):
+#    group = 1            → solo la línea CCcam
+#    group = 2            → solo la línea Newcamd
+#    group = 1,2          → las dos (recomendado cuando ambas dan los 3 CAID)
+#
+#  En NCPanel esto es el campo "CAIDs permitidos" de cada línea: lo que pongas
+#  ahí es exactamente la línea `caid =` que se genera.
+#
+#  Copia estos bloques en /etc/ncam/ncam.user y recarga:  sudo restart-ncam
+# =============================================================================
+
+
+# -----------------------------------------------------------------------------
+# 1) CLIENTE CON LOS TRES CAID (ve 1801, 1861 y 0B00)
+# -----------------------------------------------------------------------------
+[account]
+user                          = cliente_todo
+pwd                           = CAMBIA_ESTA_CLAVE_1
+description                   = Cliente con los tres CAID
+group                         = 1,2
+caid                          = 1801,1861,0B00
+# 0 = solo él; súbelo si el cliente reenvía su línea a otros descodificadores
+cccmaxhops                    = 3
+# niveles que el cliente puede reenviar de tus tarjetas (0 = no reenviar)
+cccreshare                    = 0
+uniq                          = 1
+sleep                         = 0
+monlevel                      = 0
+keepalive                     = 1
+au                            = 0
+allowedprotocols              = cccam,newcamd
+
+
+# -----------------------------------------------------------------------------
+# 2) CLIENTE SOLO CON EL CAID 1801 (aunque el proveedor dé los tres)
+# -----------------------------------------------------------------------------
+[account]
+user                          = cliente_solo_1801
+pwd                           = CAMBIA_ESTA_CLAVE_2
+description                   = Solo CAID 1801
+group                         = 1,2
+caid                          = 1801
+cccmaxhops                    = 3
+cccreshare                    = 0
+uniq                          = 1
+sleep                         = 0
+monlevel                      = 0
+keepalive                     = 1
+au                            = 0
+allowedprotocols              = cccam,newcamd
+
+
+# -----------------------------------------------------------------------------
+# 3) CLIENTE SOLO CON EL CAID 0B00
+# -----------------------------------------------------------------------------
+[account]
+user                          = cliente_solo_0b00
+pwd                           = CAMBIA_ESTA_CLAVE_3
+description                   = Solo CAID 0B00
+group                         = 1,2
+caid                          = 0B00
+cccmaxhops                    = 3
+cccreshare                    = 0
+uniq                          = 1
+sleep                         = 0
+monlevel                      = 0
+keepalive                     = 1
+au                            = 0
+allowedprotocols              = cccam,newcamd
+
+
+# -----------------------------------------------------------------------------
+# 4) REVENDEDOR (puede reenviar tu línea: más saltos y reshare)
+# -----------------------------------------------------------------------------
+#[account]
+#user                         = revendedor_1
+#pwd                          = CAMBIA_ESTA_CLAVE_4
+#description                  = Revendedor: los tres CAID y puede reenviar
+#group                        = 1,2
+#caid                         = 1801,1861,0B00
+#cccmaxhops                   = 10
+#cccreshare                   = 1          # puede reenviar 1 nivel más
+#uniq                         = 1
+#sleep                        = 0
+#monlevel                     = 0
+#keepalive                    = 1
+#au                           = 0
+
+
+# -----------------------------------------------------------------------------
+# 5) USUARIO DE CACHEX (otro servidor que comparte caché contigo)
+#    No es un cliente normal: sirve para intercambiar CW. `cacheex` en un
+#    [account] se comporta como un peer.
+# -----------------------------------------------------------------------------
+#[account]
+#user                         = peer_cacheex_entrada
+#pwd                          = CLAVE_CACHEEX
+#description                  = Peer de cacheex (intercambio de CW)
+#group                        = 1,2
+#caid                         = 1801,1861,0B00
+#cacheex                      = 3
+#cacheex_maxhop               = 2
+#cacheex_drop_csp             = 1
+#uniq                         = 1
+#sleep                        = 0
+
+
+# -----------------------------------------------------------------------------
+# 6) DVBAPI (solo si esta máquina también ve la TV; usuario fijo "dvbapiau")
+# -----------------------------------------------------------------------------
+#[account]
+#user                         = dvbapiau
+#pwd                          = dvbapi
+#description                  = Visionado local (DVBAPI)
+#group                        = 1,2
+#caid                         = 1801,1861,0B00
+#uniq                         = 3
+#sleep                        = 0
+#monlevel                     = 1
+#au                           = 1

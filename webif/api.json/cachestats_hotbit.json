@@ -1,0 +1,9 @@
+			{
+				"caid":"##HOT_CAID##",
+				"prid":"##HOT_PRID##",
+				"srvid":"##HOT_SRVID##",
+				"hits":"##HOT_HITS##",
+				"from_csp":"##HOT_FROM_CSP##",
+				"from_cacheex":"##HOT_FROM_CACHEEX##",
+				"from_localcards":"##HOT_FROM_LOCALCARDS##"
+			}

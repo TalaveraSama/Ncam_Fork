@@ -1,0 +1,18 @@
+[Unit]
+Description=NCam-NG daemon (cardserver + motor de caché v2)
+Documentation=file:///usr/share/doc/ncam-ng/README.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# Sin -f: los binarios estándar ya arrancan en primer plano (ncam usa -b por
+# defecto). Si recompilas con STAPI el daemon demoniza: añade -f aquí.
+ExecStart=/usr/bin/ncam -c /etc/ncam
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=20
+LimitNOFILE=16384
+
+[Install]
+WantedBy=multi-user.target

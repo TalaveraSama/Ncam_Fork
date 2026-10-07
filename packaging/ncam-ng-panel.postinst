@@ -1,0 +1,175 @@
+#!/bin/sh
+# ---------------------------------------------------------------------------
+# postinst del paquete ncam-ng-panel
+#
+#   * crea el usuario de sistema ncam-panel
+#   * crea /var/lib/ncam-ng-panel (base de datos) y su .env con secreto propio
+#   * prepara el entorno virtual e instala las dependencias (offline si puede)
+#   * habilita y arranca el servicio
+#
+# Rutas prefijadas con $PKGROOT para poder probarlo sin ser root.
+# ---------------------------------------------------------------------------
+set -e
+
+ROOT="${PKGROOT:-}"
+ACTION="${1:-configure}"
+PANEL_DIR="$ROOT/opt/ncam-ng-panel"
+DATA_DIR="$ROOT/var/lib/ncam-ng-panel"
+ENV_FILE="$PANEL_DIR/.env"
+
+log() { echo "ncam-ng-panel: $*"; }
+
+# detiene el servicio en una actualización (el paquete aún no tiene unit nuevas)
+if [ "$ACTION" = "configure" ] && [ -z "$ROOT" ] && command -v systemctl >/dev/null 2>&1; then
+	systemctl stop ncam-panel.service >/dev/null 2>&1 || true
+fi
+
+[ "$ACTION" = "configure" ] || exit 0
+
+# 1. usuario de sistema
+if [ -z "$ROOT" ] && ! id ncam-panel >/dev/null 2>&1; then
+	adduser --system --group --no-create-home --home /nonexistent \
+		--gecos "NCam-NG Panel" ncam-panel >/dev/null 2>&1 || \
+		useradd --system --user-group --no-create-home --home-dir /nonexistent \
+			--comment "NCam-NG Panel" ncam-panel >/dev/null 2>&1 || true
+	log "usuario del sistema: ncam-panel"
+fi
+
+# 2. directorios
+mkdir -p "$DATA_DIR"
+chmod 0750 "$DATA_DIR"
+
+# 3. fichero .env (se respeta si ya existe, p. ej. al actualizar)
+if [ ! -f "$ENV_FILE" ]; then
+	SECRET=$(python3 -c "import secrets; print(secrets.token_urlsafe(48))" 2>/dev/null || head -c 48 /dev/urandom | base64 | tr -d '\n')
+	umask 027
+	cat > "$ENV_FILE" <<EOF
+# NCam-NG Panel :: configuración (creada por el paquete)
+# Tras cambiarla:  sudo systemctl restart ncam-panel
+
+NCAM_PANEL_HOST=0.0.0.0
+NCAM_PANEL_PORT=8080
+NCAM_PANEL_SECRET=$SECRET
+NCAM_PANEL_DB=$DATA_DIR/panel.db
+
+# IPs (o rangos CIDR) de proxies de confianza: solo desde ellos se hace caso a
+# CF-Connecting-IP / X-Forwarded-For, para que la auditoría y el bloqueo por
+# intentos usen la IP real del cliente y nadie pueda falsearla.
+NCAM_PANEL_TRUSTED_PROXIES=127.0.0.1,::1
+
+# ¿Publicar el panel sin exponer la IP del servidor? Cloudflare Tunnel (sin abrir
+# puertos): ver /usr/share/doc/ncam-ng-panel/panel-sin-exponer-ip.md
+# (con el túnel en esta máquina, lo suyo es NCAM_PANEL_HOST=127.0.0.1)
+
+# WebIf del daemon NCam (motor de caché). Ajusta usuario y contraseña a los
+# de /etc/ncam/ncam.conf ([webif] httpuser/httppwd)
+NCAM_WEBIF_URL=http://127.0.0.1:8181
+NCAM_WEBIF_USER=admin
+NCAM_WEBIF_PASSWORD=ncam
+
+# Nombre del panel (aparece en los avisos de caducidad)
+NCAM_PANEL_NAME="NCPanel"
+NCAM_PANEL_NOTIFY=1
+EOF
+	chmod 0640 "$ENV_FILE"
+	umask 022
+	log "configuración creada: $ENV_FILE (secreto aleatorio incluido)"
+else
+	log "configuración conservada: $ENV_FILE"
+	# renombrado del panel: solo se cambia si aún tiene el nombre antiguo por
+	# defecto (si se personalizó, se respeta)
+	if grep -q '^NCAM_PANEL_NAME="NCam-NG Panel"' "$ENV_FILE" 2>/dev/null; then
+		sed -i 's/^NCAM_PANEL_NAME="NCam-NG Panel"/NCAM_PANEL_NAME="NCPanel"/' "$ENV_FILE"
+		log "configuración actualizada: el panel ahora se llama NCPanel"
+	fi
+fi
+
+# 4. permisos de la base de datos (el servicio corre como ncam-panel)
+if [ -z "$ROOT" ]; then
+	chown -R ncam-panel:ncam-panel "$DATA_DIR" 2>/dev/null || true
+fi
+
+# 5. dependencias de Python (entorno virtual)
+# Se pasa la ruta de las ruedas para que también sea correcta al probar el
+# paquete con PKGROOT (en una instalación normal es /usr/lib/ncam-ng-panel/wheels)
+WHEELS_DIR="$ROOT/usr/lib/ncam-ng-panel/wheels"
+if [ -x "$PANEL_DIR/setup-install.sh" ]; then
+	if ! PANEL_DIR="${PANEL_DIR%/}" WHEELS="$WHEELS_DIR" sh "$PANEL_DIR/setup-install.sh"; then
+		log "AVISO: no se pudieron preparar las dependencias."
+		log "       ejecuta a mano:  sudo ncam-ng-panel-setup --online"
+	fi
+elif [ -z "$ROOT" ] && [ -x /usr/bin/ncam-ng-panel-setup ]; then
+	if ! /usr/bin/ncam-ng-panel-setup; then
+		log "AVISO: no se pudieron preparar las dependencias."
+		log "       ejecuta a mano:  sudo ncam-ng-panel-setup --online"
+	fi
+fi
+
+# 6. super administrador (solo si la base de datos es nueva)
+if [ -z "$ROOT" ] && [ -x "$PANEL_DIR/.venv/bin/python" ] && [ ! -f "$DATA_DIR/panel.db" ]; then
+	log "creando el super administrador del panel..."
+	if PYTHONPATH="$PANEL_DIR/backend" NCAM_PANEL_DB="$DATA_DIR/panel.db" \
+			"$PANEL_DIR/.venv/bin/python" -m app.seed --username admin 2>&1 | sed 's/^/    /'; then
+		:
+	else
+		log "AVISO: no se pudo crear el super administrador; ejecuta:"
+		log "       sudo -u ncam-panel PYTHONPATH=$PANEL_DIR/backend NCAM_PANEL_DB=$DATA_DIR/panel.db $PANEL_DIR/.venv/bin/python -m app.seed --username admin"
+	fi
+fi
+
+# 6b. permisos definitivos: el grupo ncam-panel tiene que poder leer y ejecutar
+#     el entorno virtual (si no, el servicio no arranca), y el directorio de
+#     datos tiene que ser suyo para poder escribir la base de datos.
+if [ -z "$ROOT" ]; then
+	chown -R root:ncam-panel "$PANEL_DIR" 2>/dev/null || true
+	chmod -R g+rX "$PANEL_DIR" 2>/dev/null || true
+	chmod 0750 "$PANEL_DIR" 2>/dev/null || true
+	chmod 0640 "$ENV_FILE" 2>/dev/null || true
+	chown -R ncam-panel:ncam-panel "$DATA_DIR" 2>/dev/null || true
+	chmod 0750 "$DATA_DIR" 2>/dev/null || true
+fi
+
+# 7. systemd
+if [ -z "$ROOT" ] && command -v systemctl >/dev/null 2>&1 && [ -d /run/systemd/system ]; then
+	if systemctl daemon-reload >/dev/null 2>&1; then
+		systemctl enable ncam-panel.service >/dev/null 2>&1 || true
+		systemctl start ncam-panel.service || {
+			log "AVISO: el servicio no arrancó; revisa: journalctl -u ncam-panel -n 40"
+		}
+	fi
+fi
+
+# 8. el panel consulta el WebIf del daemon desde 127.0.0.1 (los dos van en esta
+#    máquina): si esa IP no está en httpallowed el daemon responde 403 y el panel
+#    se queda «sin conexión». La comprobación la hace ncam-ng-ctl (una sola
+#    fuente de verdad) y solo se avisa: la lista es del paquete del daemon.
+CTL=/usr/bin/ncam-ng-ctl
+[ -x "$CTL" ] || CTL="$(command -v ncam-ng-ctl 2>/dev/null || true)"
+NCAM_CONF_FILE="${NCAM_CONF_FILE:-/etc/ncam/ncam.conf}"
+if [ -z "$ROOT" ] && [ -n "$CTL" ] && [ -r "$NCAM_CONF_FILE" ]; then
+	if ! "$CTL" webif check >/dev/null 2>&1; then
+		log "AVISO: el panel consulta el WebIf del daemon desde 127.0.0.1 y esa IP no está"
+		log "       en httpallowed; el panel mostrará «sin conexión» (HTTP 403)."
+		"$CTL" webif check 2>/dev/null | sed 's/^[[:space:]]*/       /' || true
+		log "       detalle:  ncam-ng-ctl webif"
+	fi
+fi
+
+log "panel instalado en $PANEL_DIR"
+log "configuración:  $ENV_FILE"
+log "base de datos:  $DATA_DIR/panel.db"
+log "estado:         systemctl status ncam-panel"
+log "puerto:         ncam-ng-ctl panel port        (cambiarlo: ncam-ng-ctl panel port 8090)"
+log "logs:           journalctl -u ncam-panel -f"
+log "web:            http://TU_IP:8080   (usuario admin; la contraseña la mostró la semilla)"
+log "sin abrir puertos:  ver /usr/share/doc/ncam-ng-panel/panel-sin-exponer-ip.md (Cloudflare Tunnel)"
+log "guarda esa contraseña: no se vuelve a mostrar"
+log "otro administrador:  ncam-ng-ctl admin add USUARIO   (o desde la web: Nueva cuenta -> Administrador)"
+log "ver las cuentas:     ncam-ng-ctl admin"
+log ""
+log "IMPORTANTE: no abras $DATA_DIR/panel.db con un editor de textos (nano, vi...):"
+log "            es una base de datos SQLite y se corrompe. Para consultarla:"
+log "              sqlite3 $DATA_DIR/panel.db 'select username, role, status from users;'"
+log "            La configuración se cambia en el panel web o en el fichero .env."
+
+exit 0
