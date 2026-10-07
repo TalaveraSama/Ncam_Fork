@@ -1,11 +1,16 @@
 #!/bin/sh
-# Arranca el panel NCam-NG (API + frontend) en el puerto indicado.
+# Arranca el panel NCam-NG (API + frontend). Es también el arranque del servicio
+# systemd (ExecStart=/opt/ncam-ng-panel/run.sh), así que la dirección y el puerto
+# salen del MISMO sitio en los dos casos: el fichero .env del panel.
 #
-#   ./run.sh                     # usa panel/.venv si existe (si no, python3 del sistema)
-#   NCAM_PANEL_PORT=9000 ./run.sh
+#   ./run.sh                          # usa panel/.venv si existe (si no, python3 del sistema)
+#   NCAM_PANEL_PORT=9000 ./run.sh     # lo que pases en el entorno manda sobre el .env
 #
 # Variables de entorno útiles: NCAM_PANEL_HOST, NCAM_PANEL_PORT, NCAM_PANEL_DB,
 # NCAM_WEBIF_URL... (cualquiera del .env.example).
+#
+# Para cambiar el puerto del servicio instalado:
+#   sudo ncam-ng-ctl panel port 8090     (edita el .env, reinicia y comprueba)
 set -e
 cd "$(dirname "$0")"
 
@@ -32,6 +37,24 @@ fi
 
 export PYTHONPATH="$(pwd)/backend:${PYTHONPATH}"
 
+# dirección y puerto: del .env o, si no hay, los de siempre (0.0.0.0:8080)
+HOST="${NCAM_PANEL_HOST:-0.0.0.0}"
+PORT="${NCAM_PANEL_PORT:-8080}"
+case "$PORT" in
+	''|*[!0-9]*)
+		echo "error: NCAM_PANEL_PORT='$PORT' no es un número; revisa $(pwd)/.env" >&2
+		exit 1
+		;;
+	0*)
+		echo "error: NCAM_PANEL_PORT='$PORT' no es un puerto válido (1-65535); revisa $(pwd)/.env" >&2
+		exit 1
+		;;
+esac
+if [ "$PORT" -gt 65535 ]; then
+	echo "error: NCAM_PANEL_PORT=$PORT está fuera de rango (1-65535); revisa $(pwd)/.env" >&2
+	exit 1
+fi
+
 if [ -x ".venv/bin/python" ]; then
 	PYTHON="$(pwd)/.venv/bin/python"
 else
@@ -42,6 +65,7 @@ else
 	fi
 fi
 
+echo "NCPanel: escuchando en http://$HOST:$PORT"
 exec "$PYTHON" -m uvicorn app.main:app \
-	--host "${NCAM_PANEL_HOST:-0.0.0.0}" \
-	--port "${NCAM_PANEL_PORT:-8080}"
+	--host "$HOST" \
+	--port "$PORT"

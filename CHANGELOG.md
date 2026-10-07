@@ -1,5 +1,32 @@
 # Changelog
 
+## [2.4.5] - 2026-10-07 — cambiar el puerto del panel de verdad
+
+* **Arreglado: `NCAM_PANEL_PORT` del `.env` no cambiaba nada.** La unidad systemd
+  traía el puerto fijado (`ExecStart=… --port 8080`), así que editar el `.env` y
+  reiniciar dejaba el panel en 8080: parecía que el cambio se ignoraba. Ahora el
+  servicio arranca con `run.sh` —el mismo que se usa a mano— y el `.env` es la
+  única fuente de verdad para la dirección y el puerto.
+* **Nuevo `ncam-ng-ctl panel port`**: muestra el puerto actual, si el panel
+  responde y a qué puerto apunta el túnel de Cloudflare; y
+  `sudo ncam-ng-ctl panel port NUEVO` cambia el puerto (valida el número, avisa si
+  está ocupado, edita el `.env` con copia de seguridad, reinicia, comprueba la
+  salud del panel y recuerda actualizar `cloudflared` y `ufw`).
+* **`run.sh` valida el puerto** antes de arrancar: si el `.env` tiene algo que no
+  es un número entre 1 y 65535, avisa y no arranca (antes uvicorn fallaba con un
+  error críptico). Además deja en el registro la dirección con la que arranca.
+* `devtools/install-systemd.sh` genera la unidad del panel de la misma forma
+  (arranque por `run.sh`), y avisa de que `PANEL_HOST`/`PANEL_PORT` se ponen ahora
+  en el `.env`.
+* Documentación: [`docs/ajustes.md`](docs/ajustes.md) (§8, receta nueva y
+  problemas frecuentes), [`INSTALL.md`](INSTALL.md) (unidad de ejemplo, tabla de
+  comandos y dos filas nuevas), [`panel/README.md`](panel/README.md),
+  [`README.md`](README.md) y la guía del túnel (si cambias el puerto, el túnel
+  tiene que apuntar al nuevo).
+* Pruebas: 12 nuevas del instalador (68 en total) que arrancan `run.sh` con un
+  Python de mentira para comprobar que el puerto sale del `.env`, que la unidad
+  systemd ya no lo fija y que `panel port` edita, avisa y verifica.
+
 ## [2.4.4] - 2026-10-06 — el panel ya no se queda «sin conexión» sin decir por qué
 
 * **Diagnóstico claro del `HTTP 403` del WebIf.** Cuando el daemon rechaza al panel

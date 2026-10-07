@@ -8,9 +8,15 @@ Wants=network-online.target
 Type=simple
 WorkingDirectory=/opt/ncam-ng-panel
 Environment=PYTHONPATH=/opt/ncam-ng-panel/backend
-Environment=NCAM_PANEL_HOST=0.0.0.0
-Environment=NCAM_PANEL_PORT=8080
-ExecStart=/opt/ncam-ng-panel/.venv/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port 8080
+# La dirección y el puerto de escucha se leen de /opt/ncam-ng-panel/.env
+# (NCAM_PANEL_HOST y NCAM_PANEL_PORT). Para cambiarlos:
+#
+#   sudo ncam-ng-ctl panel port 8090     (edita el .env, reinicia y comprueba)
+#   sudo restart-ncam-panel              (o a mano, tras editar el .env)
+#
+# El arranque está en run.sh (el mismo que se usa a mano), para que el .env sea
+# la única fuente de verdad y no haya puertos distintos en cada sitio.
+ExecStart=/opt/ncam-ng-panel/run.sh
 Restart=on-failure
 RestartSec=5
 # usuario sin privilegios creado por el paquete

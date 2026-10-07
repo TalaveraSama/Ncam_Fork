@@ -178,6 +178,7 @@ restart-ncam              # reinicia el daemon (WebIf + motor de caché)
 restart-ncam-panel        # reinicia el panel web
 ncam-ng-status            # estado, puertos y comprobación HTTP
 ncam-ng-ctl webif add TU_IP   # permite tu IP (casa/VPN) en el WebIf y reinicia
+ncam-ng-ctl panel port 8090   # cambia el puerto del panel (8080 por defecto)
 ```
 
 > El WebIf solo atiende a las IPs de `httpallowed`/`httpdyndns` (las de **quien se

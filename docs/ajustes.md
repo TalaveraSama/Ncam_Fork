@@ -265,7 +265,7 @@ Después hay que reiniciar el panel: `sudo restart-ncam-panel`.
 
 | Variable | Por defecto | Para qué |
 | --- | --- | --- |
-| `NCAM_PANEL_HOST` / `NCAM_PANEL_PORT` | `0.0.0.0` / `8080` | En qué dirección y puerto escucha el panel. |
+| `NCAM_PANEL_HOST` / `NCAM_PANEL_PORT` | `0.0.0.0` / `8080` | En qué dirección y puerto escucha el panel. El puerto se cambia con `sudo ncam-ng-ctl panel port NUEVO` (o editando esta línea y `restart-ncam-panel`). |
 | `NCAM_PANEL_SECRET` | generado al instalar | Clave que firma los tokens de sesión. Si la cambias, se cierran todas las sesiones. |
 | `NCAM_PANEL_DB` | `/var/lib/ncam-ng-panel/panel.db` | Ruta de la base de datos SQLite. |
 | `NCAM_PANEL_CACHE_POLL` / `NCAM_PANEL_CACHE_POLL_INTERVAL` | `1` / `60` | Muestreo automático del histórico y cada cuántos segundos (luego se puede apagar desde Ajustes con *Muestreo automático*). |
@@ -288,6 +288,25 @@ lo que se publica a los clientes?** → pantalla Ajustes, se aplica al guardar.
 1. Ajustes → *Host público* = `midominio.com` → Guardar.
 2. Comprueba que los 4 puertos coinciden con `/etc/ncam/ncam.conf`.
 3. Vuelve a exportar las líneas de los clientes afectados.
+
+**Quiero cambiar el puerto del panel (por ejemplo al 8090)**
+
+1. ```bash
+   ncam-ng-ctl panel port             # qué puerto usa ahora y si responde
+   sudo ncam-ng-ctl panel port 8090   # cambiarlo y reiniciar el panel
+   ```
+2. Si el panel se publica por un túnel de Cloudflare, apunta al puerto nuevo:
+
+   ```bash
+   sudo nano /etc/cloudflared/config.yml     # service: http://127.0.0.1:8090
+   sudo systemctl restart cloudflared
+   ```
+3. Si no usas túnel y entras por IP, abre el puerto nuevo y cierra el viejo:
+
+   ```bash
+   sudo ufw allow 8090/tcp && sudo ufw delete allow 8080/tcp
+   ```
+4. La URL nueva es `http://TU_IP:8090`. El WebIf del daemon (8181) no cambia.
 
 **Quiero limitar la memoria de la caché a 50 000 entradas**
 
@@ -327,7 +346,8 @@ de los avisos.
 | Guardé los límites de caché y el daemon no cambia | Son la plantilla de `ncam.conf`: exporta el bloque, cópialo en `/etc/ncam/ncam.conf` y `sudo restart-ncam`. |
 | Los avisos no llegan | Revisa que `notify.enabled` = `1` **y** el canal = `1`; usa *Probar*; mira el historial (ahí está el error del SMTP/Telegram). Gmail necesita contraseña de aplicación y puerto 587. |
 | El consumo de ECM no sube | La línea tiene que existir en el daemon (exportada y recargada) y haber servido ECM con OK. Pulsa *Medir ahora* en **Consumo de ECM** y mira si `ecm_ok` aparece en el WebIf (`userstats`). |
-| Cambié el puerto del panel y ya no responde | Es un valor del `.env`: edítalo con `sudo ncam-ng-ctl config panel` y `sudo restart-ncam-panel`. |
+| Cambié el puerto del panel y ya no responde | Comprueba cuál está usando de verdad: `ncam-ng-ctl panel port`. Cámbialo con `sudo ncam-ng-ctl panel port NUEVO` (o edita `NCAM_PANEL_PORT` con `sudo ncam-ng-ctl config panel` y `sudo restart-ncam-panel`) y abre el puerto nuevo en el cortafuegos. Si el panel se publica por el túnel, actualiza también `cloudflared`. |
+| Quiero mover el panel a otro puerto (el 8080 está ocupado) | `sudo ncam-ng-ctl panel port 8090`: valida el número, avisa si el puerto está ocupado, lo escribe en el `.env` (con copia de seguridad), reinicia y comprueba que el panel responde en el nuevo. Si lo publicas por Cloudflare, apunta el túnel al puerto nuevo y `sudo systemctl restart cloudflared`. |
 | Un campo de contraseña muestra `***` | Es normal: significa que hay un valor guardado y que no se devuelve en claro. Escribe encima para cambiarlo o vacíalo para borrarlo. |
 | ¿Puedo editar `panel.db` con `nano`? | **No.** Es SQLite; editarlo a mano lo corrompe. Usa la interfaz o `sqlite3`. |
 

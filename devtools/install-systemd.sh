@@ -14,7 +14,9 @@
 #   NCAM_BIN       binario del daemon        (por defecto /usr/local/bin/ncam)
 #   NCAM_CONFDIR   configuración del daemon  (por defecto /usr/local/etc)
 #   PANEL_DIR      carpeta del panel         (por defecto <repo>/panel)
-#   PANEL_HOST/PANEL_PORT  escucha del panel (0.0.0.0 / 8080)
+#
+# La dirección y el puerto del panel se leen de $PANEL_DIR/.env (NCAM_PANEL_HOST
+# y NCAM_PANEL_PORT), tanto si arranca el servicio como a mano con ./run.sh.
 # ---------------------------------------------------------------------------
 set -e
 
@@ -28,7 +30,7 @@ while [ $# -gt 0 ]; do
 		--panel-only)  DO_DAEMON=0; shift ;;
 		--no-start)    DO_START=0; shift ;;
 		-h|--help)
-			sed -n '2,18p' "$0" | sed 's/^# \{0,1\}//'
+			sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'
 			exit 0
 			;;
 		*) echo "opción no reconocida: $1 (usa --help)" >&2; exit 2 ;;
@@ -53,6 +55,12 @@ STAMP=$(date +%Y%m%d-%H%M%S)
 NCAM_BIN="${NCAM_BIN:-/usr/local/bin/ncam}"
 NCAM_CONFDIR="${NCAM_CONFDIR:-/usr/local/etc}"
 PANEL_DIR="${PANEL_DIR:-$repo_root/panel}"
+
+# ¿quien llama ha fijado la escucha del panel? (el servicio la lee del .env, así
+# que hay que avisar de dónde ponerla)
+PANEL_HOST_SET=0; PANEL_PORT_SET=0
+if [ -n "${PANEL_HOST+x}" ]; then PANEL_HOST_SET=1; fi
+if [ -n "${PANEL_PORT+x}" ]; then PANEL_PORT_SET=1; fi
 PANEL_HOST="${PANEL_HOST:-0.0.0.0}"
 PANEL_PORT="${PANEL_PORT:-8080}"
 
@@ -144,16 +152,23 @@ Wants=network-online.target
 Type=simple
 WorkingDirectory=$PANEL_DIR
 Environment=PYTHONPATH=$PANEL_DIR/backend
-Environment=NCAM_PANEL_HOST=$PANEL_HOST
-Environment=NCAM_PANEL_PORT=$PANEL_PORT
-ExecStart=$panel_python -m uvicorn app.main:app --host $PANEL_HOST --port $PANEL_PORT
+# la dirección y el puerto se leen de $PANEL_DIR/.env (NCAM_PANEL_HOST/PORT):
+# el arranque es run.sh, el mismo que se usa a mano, para no tener el puerto en
+# dos sitios distintos. Cambiarlo:  sudo ncam-ng-ctl panel port 8090
+ExecStart=$PANEL_DIR/run.sh
 Restart=on-failure
 RestartSec=5
-# el panel lee panel/.env por su cuenta, pero las variables de arriba mandan
 
 [Install]
 WantedBy=multi-user.target
 EOF
+
+	if [ "$PANEL_HOST_SET" = "1" ] || [ "$PANEL_PORT_SET" = "1" ]; then
+		echo "  aviso: PANEL_HOST/PANEL_PORT ya no se graban en la unidad; el servicio los"
+		echo "         lee de $PANEL_DIR/.env. Ponlos ahí (o usa ncam-ng-ctl panel port):"
+		echo "             NCAM_PANEL_HOST=$PANEL_HOST"
+		echo "             NCAM_PANEL_PORT=$PANEL_PORT"
+	fi
 fi
 
 # ---------------------------------------------------------------------------

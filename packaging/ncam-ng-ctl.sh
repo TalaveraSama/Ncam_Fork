@@ -19,6 +19,11 @@
 #   ncam-ng-ctl admin del USUARIO       elimina una cuenta del panel
 #   ncam-ng-ctl admin passwd USUARIO    nueva contraseña para esa cuenta
 #
+#   ncam-ng-ctl panel port              puerto del panel y si está escuchando
+#   ncam-ng-ctl panel port NUEVO        cambia el puerto del panel (edita el .env,
+#                                       reinicia y comprueba; avisa si el túnel de
+#                                       Cloudflare o el cortafuegos apuntan al viejo)
+#
 #   ncam-ng-ctl webif                   quién puede entrar al WebIf (IPs permitidas)
 #   ncam-ng-ctl webif add IP|RANGO|DOMINIO [...]    permite ese acceso
 #   ncam-ng-ctl webif del IP|RANGO|DOMINIO [...]    quita ese acceso
@@ -33,15 +38,17 @@
 #   ncam-ng-status        = ncam-ng-ctl status
 #
 # Opciones: --dry-run (solo muestra lo que haría), -n N / --lines N, -f / --follow,
-#           --no-restart (webif: cambia la configuración sin reiniciar el daemon)
+#           --no-restart (webif y panel port: cambian la configuración sin
+#           reiniciar el servicio)
 # ---------------------------------------------------------------------------
 set -e
 
 NCAM_SERVICE="ncam"
 PANEL_SERVICE="ncam-panel"
 NCAM_CONF="${NCAM_CONF:-/etc/ncam/ncam.conf}"   # se puede apuntar a otro fichero (pruebas, configs propias)
-PANEL_DIR="/opt/ncam-ng-panel"
+PANEL_DIR="${NCAM_PANEL_DIR:-/opt/ncam-ng-panel}"   # se puede apuntar a otra instalación (pruebas)
 PANEL_ENV="$PANEL_DIR/.env"
+CLOUDFLARED_CONF="${NCAM_CLOUDFLARED_CONF:-/etc/cloudflared/config.yml}"
 PANEL_DB_DEFAULT="/var/lib/ncam-ng-panel/panel.db"
 
 ACTION=""
@@ -55,6 +62,7 @@ WEBIF_ITEMS=""
 ADMIN_OP=""
 ADMIN_ITEMS=""
 NO_RESTART=0
+PORT_ARG=""
 
 # Los argumentos se van consumiendo al analizarlos, así que se guarda una copia
 # para poder re-ejecutar el script con sudo conservándolos.
@@ -62,6 +70,13 @@ ORIG_ARGS="$*"
 
 say() { printf '%s\n' "$*"; }
 die() { printf 'error: %s\n' "$*" >&2; exit 1; }
+
+action_name() {   # cómo se escribe la acción en los mensajes (para copiar y pegar)
+	case "$ACTION" in
+		panel-port) printf '%s' "panel port" ;;
+		*)          printf '%s' "$ACTION" ;;
+	esac
+}
 
 usage() {
 	awk 'NR==1{next} /^#/{sub(/^# ?/,""); print; next} {exit}' "$0"
@@ -87,7 +102,7 @@ validate_args() {
 					''|*[!0-9]*) echo "error: --lines necesita un número" >&2; exit 2 ;;
 				esac
 				shift 2 ;;
-			-f|--follow|--dry-run|--no-restart|-h|--help|status|start|stop|restart|logs|config|passwd|version|webif|admin|help) shift ;;
+			-f|--follow|--dry-run|--no-restart|-h|--help|status|start|stop|restart|logs|config|passwd|version|webif|admin|panel-port|help) shift ;;
 			-*) echo "opción no reconocida: $1 (usa --help)" >&2; exit 2 ;;
 			*) shift ;;
 		esac
@@ -97,7 +112,7 @@ validate_args "$@"
 
 while [ $# -gt 0 ]; do
 	case "$1" in
-		status|start|stop|restart|logs|config|passwd|version|webif|admin|help)
+		status|start|stop|restart|logs|config|passwd|version|webif|admin|panel-port|help)
 			if [ -z "$ACTION" ]; then
 				ACTION="$1"
 			elif [ "$ACTION" = "admin" ] && [ -z "$ADMIN_OP" ] \
@@ -115,6 +130,8 @@ while [ $# -gt 0 ]; do
 				esac
 			elif [ "$ACTION" = "passwd" ]; then
 				USERNAME="$1"     # ncam-ng-ctl passwd <usuario>
+			elif [ "$ACTION" = "panel-port" ]; then
+				PORT_ARG="$1"     # ncam-ng-ctl panel port <nuevo>
 			elif [ "$ACTION" = "admin" ]; then
 				ADMIN_ITEMS="$ADMIN_ITEMS $1"   # el usuario puede llamarse "admin", "version"...
 			elif [ "$ACTION" = "webif" ]; then
@@ -124,7 +141,20 @@ while [ $# -gt 0 ]; do
 			fi
 			shift ;;
 		ncam|daemon) TARGET="daemon"; shift ;;
-		panel)       TARGET="panel"; shift ;;
+		panel)
+			# "panel port [NUEVO]": puerto del panel (no es el atajo de reinicio)
+			if [ "$2" = "port" ]; then
+				if [ -z "$ACTION" ]; then
+					ACTION="panel-port"
+				fi
+				shift 2
+				case "${1:-}" in
+					''|-*) : ;;                      # sin número (o con otra opción)
+					*)     PORT_ARG="$1"; shift ;;   # ncam-ng-ctl panel port 8090
+				esac
+				continue
+			fi
+			TARGET="panel"; shift ;;
 		all|both)    TARGET="all"; shift ;;
 		-f|--follow)    FOLLOW=1; shift ;;
 		-n|--lines)     LINES="$2"; shift 2 ;;
@@ -142,6 +172,8 @@ while [ $# -gt 0 ]; do
 				esac
 			elif [ "$ACTION" = "admin" ]; then
 				ADMIN_ITEMS="$ADMIN_ITEMS $1"    # ncam-ng-ctl admin add USUARIO [rol] [clave] [email]
+			elif [ "$ACTION" = "panel-port" ] && [ -z "$PORT_ARG" ]; then
+				PORT_ARG="$1"     # ncam-ng-ctl panel port 8090
 			elif [ "$ACTION" = "passwd" ] && [ -z "$USERNAME" ]; then
 				USERNAME="$1"
 			elif [ "$ACTION" = "webif" ] && [ -z "$WEBIF_OP" ] \
@@ -171,6 +203,7 @@ NEED_ROOT=1
 case "$ACTION" in
 	status|version) NEED_ROOT=0 ;;
 	webif) [ -z "$WEBIF_OP" ] || [ "$WEBIF_OP" = "list" ] || [ "$WEBIF_OP" = "check" ] && NEED_ROOT=0 ;;
+	# panel-port siempre como root: el .env es 0640 y el servicio hay que reiniciarlo
 esac
 [ "$DRY" = "1" ] && NEED_ROOT=0
 
@@ -186,9 +219,9 @@ if [ "$NEED_ROOT" = "1" ] && [ "$(id -u)" != "0" ]; then
 		if sudo -- sh "$(self_path)" $ORIG_ARGS; then
 			exit 0
 		fi
-		die "no se pudo completar con sudo; ejecútalo como root:  sudo ncam-ng-ctl $ACTION"
+		die "no se pudo completar con sudo; ejecútalo como root:  sudo ncam-ng-ctl $(action_name)"
 	else
-		die "ejecuta este comando como root:  sudo ncam-ng-ctl $ACTION"
+		die "ejecuta este comando como root:  sudo ncam-ng-ctl $(action_name)"
 	fi
 fi
 
@@ -440,6 +473,59 @@ conf_set() {   # conf_set <clave> <valor>  (mantiene el resto del fichero intact
 	cp -p "$NCAM_CONF" "$NCAM_CONF.bak-$(date +%Y%m%d-%H%M%S)"
 	cat "$tmp" > "$NCAM_CONF"
 	rm -f "$tmp"
+}
+
+# ---------------------------------------------------------------------------
+# Panel: puerto de escucha (NCAM_PANEL_PORT del .env del panel)
+# ---------------------------------------------------------------------------
+valid_port() {   # valid_port <n>  -> 0 si es un puerto válido (1-65535)
+	case "$1" in
+		''|*[!0-9]*) return 1 ;;
+		0*) return 1 ;;          # 0, o con ceros delante (0808)
+	esac
+	[ "$1" -le 65535 ]
+}
+
+port_in_use() {   # port_in_use <puerto> -> 0 si hay algo escuchando en él
+	if command -v ss >/dev/null 2>&1; then
+		ss -ltn 2>/dev/null | awk 'NR > 1 { print $4 }' | grep -qE "[:.]$1$"
+	elif command -v netstat >/dev/null 2>&1; then
+		netstat -ltn 2>/dev/null | awk '$1 ~ /tcp/ { print $4 }' | grep -qE "[:.]$1$"
+	else
+		return 1
+	fi
+}
+
+port_owner() {   # port_owner <puerto> -> quién lo ocupa (para el aviso)
+	if command -v ss >/dev/null 2>&1; then
+		ss -ltnp 2>/dev/null | grep -E "[:.]$1[[:space:]]" || true
+	elif command -v netstat >/dev/null 2>&1; then
+		netstat -ltnp 2>/dev/null | grep -E "[:.]$1[[:space:]]" || true
+	fi
+}
+
+cloudflared_port() {   # cloudflared_port -> puerto local al que apunta el túnel, si se sabe
+	[ -r "$CLOUDFLARED_CONF" ] || return 0
+	sed -n \
+		-e 's|.*service:[[:space:]]*http://127\.0\.0\.1:\([0-9]\{1,5\}\).*|\1|p' \
+		-e 's|.*service:[[:space:]]*http://localhost:\([0-9]\{1,5\}\).*|\1|p' \
+		"$CLOUDFLARED_CONF" 2>/dev/null | tail -n 1
+}
+
+env_set() {   # env_set <clave> <valor>  -> escribe la clave en el .env del panel
+	key="$1"; value="$2"
+	bak="$PANEL_ENV.bak-$(date +%Y%m%d-%H%M%S)"
+	cp -p "$PANEL_ENV" "$bak" 2>/dev/null || true
+	tmp="$(mktemp)" || die "no se pudo crear un fichero temporal"
+	awk -v k="$key" -v v="$value" '
+		BEGIN { done = 0 }
+		$0 ~ "^[[:space:]]*" k "[[:space:]]*=" { print k "=" v; done = 1; next }
+		{ print }
+		END { if (!done) print k "=" v }
+	' "$PANEL_ENV" > "$tmp" || { rm -f "$tmp"; die "no se pudo preparar la edición de $PANEL_ENV"; }
+	cat "$tmp" > "$PANEL_ENV"          # se conservan propietario y permisos
+	rm -f "$tmp"
+	say "  copia de seguridad: $bak"
 }
 
 do_webif_show() {
@@ -751,6 +837,90 @@ do_logs() {
 	return 0
 }
 
+do_panel_port() {
+	[ -r "$PANEL_ENV" ] || die "no encuentro $PANEL_ENV (¿está instalado el paquete ncam-ng-panel?)"
+	actual="$(panel_port)"
+	nuevo="$PORT_ARG"
+
+	if [ -z "$nuevo" ]; then
+		say "Panel NCPanel (puerto $actual)"
+		say "========================="
+		say "  fichero:  $PANEL_ENV   (NCAM_PANEL_PORT)"
+		code="$(http_code_retry "http://127.0.0.1:$actual/api/v1/health" 3 || true)"
+		case "$code" in
+			200) say "  estado:   responde en http://127.0.0.1:$actual (ok)" ;;
+			*)   say "  estado:   sin respuesta en http://127.0.0.1:$actual/api/v1/health"
+			     say "            (¿está parado el servicio? ncam-ng-ctl logs panel -n 30)" ;;
+		esac
+		if [ "$(id -u)" = "0" ] && command -v ufw >/dev/null 2>&1; then
+			if ufw status 2>/dev/null | grep -qE "^$actual(/tcp)?\b"; then
+				say "  cortafuegos: hay una regla para el puerto $actual en ufw"
+			fi
+		fi
+		cf="$(cloudflared_port)"
+		if [ -n "$cf" ]; then
+			say "  cloudflared:  el túnel apunta a 127.0.0.1:$cf"
+		fi
+		say ""
+		say "  Cambiarlo:  ncam-ng-ctl panel port NUEVO   (p. ej. 8090)"
+		say "              (o edita el .env:  ncam-ng-ctl config panel)"
+		return 0
+	fi
+
+	valid_port "$nuevo" || die "el puerto '$nuevo' no es válido (usa un número entre 1 y 65535)"
+	if [ "$nuevo" = "$actual" ]; then
+		say "el panel ya escucha en el puerto $nuevo; no cambio nada"
+		return 0
+	fi
+	if port_in_use "$nuevo"; then
+		say "el puerto $nuevo ya está ocupado:"
+		port_owner "$nuevo" | sed 's/^/    /'
+		die "elige otro puerto (el panel no podría arrancar)"
+	fi
+
+	say "Panel NCPanel: puerto $actual -> $nuevo"
+	if [ "$DRY" = "1" ]; then
+		say "  [dry-run] escribiría NCAM_PANEL_PORT=$nuevo en $PANEL_ENV"
+	else
+		env_set NCAM_PANEL_PORT "$nuevo"
+	fi
+
+	if [ "$NO_RESTART" = "1" ]; then
+		say ""
+		say "(sin reiniciar todavía: aplícalo con  restart-ncam-panel)"
+	elif [ "$DRY" = "1" ]; then
+		say "  [dry-run] reiniciaría $PANEL_SERVICE y comprobaría el puerto $nuevo"
+	else
+		say ""
+		say "==> reiniciando $PANEL_SERVICE"
+		run systemctl restart "$PANEL_SERVICE"
+		code="$(http_code_retry "http://127.0.0.1:$nuevo/api/v1/health" 15 || true)"
+		if [ "$code" = "200" ]; then
+			say "    ok: el panel responde en http://127.0.0.1:$nuevo"
+			say "        desde otro equipo:  http://TU_IP:$nuevo"
+		else
+			say "    AVISO: no responde en el puerto $nuevo (HTTP ${code:-000}); últimos errores:"
+			journalctl -u "$PANEL_SERVICE" -n 15 --no-pager 2>/dev/null | sed 's/^/    /' || true
+			say "    vuelve al puerto anterior:  ncam-ng-ctl panel port $actual"
+		fi
+	fi
+
+	cf="$(cloudflared_port)"
+	if [ -n "$cf" ] && [ "$cf" != "$nuevo" ]; then
+		say ""
+		say "  AVISO: el túnel de Cloudflare ($CLOUDFLARED_CONF) apunta a 127.0.0.1:$cf."
+		say "         cámbialo a 127.0.0.1:$nuevo y reinicia:  sudo systemctl restart cloudflared"
+		say "         (en un túnel gestionado desde la web: Networks -> Tunnels -> hostname)"
+	fi
+	if [ "$(id -u)" = "0" ] && command -v ufw >/dev/null 2>&1; then
+		if ufw status 2>/dev/null | grep -qE "^$actual(/tcp)?\b"; then
+			say "  el cortafuegos tenía una regla para el puerto $actual; actualízala:"
+			say "      sudo ufw delete allow $actual/tcp   &&   sudo ufw allow $nuevo/tcp"
+		fi
+	fi
+	return 0
+}
+
 do_config() {
 	case "$TARGET" in
 		daemon) file="$NCAM_CONF" ;;
@@ -925,6 +1095,7 @@ case "$ACTION" in
 	config)  do_config ;;
 	passwd)  do_passwd ;;
 	admin)   do_admin ;;
+	panel-port) do_panel_port ;;
 	version) do_version ;;
 	webif)
 		case "$WEBIF_OP" in

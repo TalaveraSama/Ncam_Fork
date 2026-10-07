@@ -400,9 +400,9 @@ Wants=network-online.target
 Type=simple
 WorkingDirectory=/ruta/a/Ncam_Fork/panel
 Environment=PYTHONPATH=/ruta/a/Ncam_Fork/panel/backend
-Environment=NCAM_PANEL_HOST=0.0.0.0
-Environment=NCAM_PANEL_PORT=8080
-ExecStart=/ruta/a/Ncam_Fork/panel/.venv/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port 8080
+# la dirección y el puerto salen de panel/.env (NCAM_PANEL_HOST / NCAM_PANEL_PORT),
+# y el arranque es el mismo que a mano: ./run.sh
+ExecStart=/ruta/a/Ncam_Fork/panel/run.sh
 Restart=on-failure
 RestartSec=5
 
@@ -479,6 +479,8 @@ esquema v4 añade las columnas de avisos y de consumo de ECM).
 | Los avisos de caducidad no se envían | Activa `notify.enabled`, el canal (`notify.channel.email` / `notify.channel.telegram`) y rellena `notify.smtp.*` o el token del bot. |
 | La facturación por ECM no cobra | Debe haber **bloques completos** servidos (`billing.ecm.block`), saldo del propietario y las líneas exportadas al daemon como cuentas. |
 | Cierro la terminal y el panel deja de responder | está lanzado a mano: instálalo como servicio con `sudo devtools/install-systemd.sh`. |
+| Quiero cambiar el puerto del panel | `sudo ncam-ng-ctl panel port 8090`: valida el número, avisa si está ocupado, lo escribe en `/opt/ncam-ng-panel/.env` (con copia de seguridad), reinicia y comprueba que responde. Si el panel va por Cloudflare Tunnel, apunta el túnel al puerto nuevo (`service: http://127.0.0.1:8090` en `/etc/cloudflared/config.yml`) y `sudo systemctl restart cloudflared`. |
+| Cambié `NCAM_PANEL_PORT` en el `.env` y el panel sigue en 8080 | Estabas en una versión con el puerto fijado en la unidad systemd (hasta la 2.4.4). Actualiza (`sudo ncam-ng-install-deb`) o cambia el puerto con `sudo ncam-ng-ctl panel port NUEVO`. Compruébalo con `ncam-ng-ctl panel port`. |
 | El servicio no arranca y el puerto está ocupado | tienes un proceso manual usando el mismo puerto: páralo (`Ctrl+C` o `sudo kill`) y `sudo systemctl restart ncam-panel`. |
 | `Could not open requirements file: requirements.txt` | Estás en la raíz del repo: `pip install -r panel/requirements.txt`, o mejor `cd panel` (o usa `devtools/install-panel.sh`). |
 | `.venv` creado en la raíz del repo por error | El entorno del panel va en `panel/.venv`: borra el de la raíz (`rm -rf .venv`) y ejecuta `devtools/install-panel.sh`. |
@@ -537,7 +539,8 @@ Qué usar según lo que cambies:
 | quién entra al WebIf (tu IP, la de tu VPN) | `ncam-ng-ctl webif add TU_IP` (edita y reinicia solo) |
 | quién administra el panel (más administradores) | `ncam-ng-ctl admin add USUARIO` |
 | `[webif]`, `[cache]`, `[cccam]`… en `/etc/ncam/ncam.conf` | `restart-ncam` |
-| puerto, WebIf del daemon o avisos en `/opt/ncam-ng-panel/.env` | `restart-ncam-panel` |
+| el puerto del panel (`8080` por defecto) | `sudo ncam-ng-ctl panel port 8090` (edita el `.env` y reinicia) |
+| WebIf del daemon o avisos en `/opt/ncam-ng-panel/.env` | `restart-ncam-panel` |
 | el binario del daemon (compilación nueva) | `restart-ncam` |
 | no sabes qué pasa | `ncam-ng-status` y `ncam-ng-ctl logs ncam -n 100` |
 

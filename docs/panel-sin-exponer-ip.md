@@ -161,6 +161,14 @@ sudo ufw reload
 > daemon responde `403 Access denied` y el panel se queda *sin conexión*. Se
 > comprueba en un paso: `ncam-ng-ctl webif check`.
 
+> **Si cambias el puerto del panel, el túnel tiene que enterarse.** El panel
+> escucha en `NCAM_PANEL_PORT` (8080 de serie) y el túnel reenvía a
+> `http://127.0.0.1:8080`: son dos sitios que tienen que coincidir. Cámbialo con
+> `sudo ncam-ng-ctl panel port NUEVO` (te avisa de que cloudflared apunta al viejo),
+> edita `service:` en `/etc/cloudflared/config.yml` (o el hostname en el panel de
+> Cloudflare si el túnel es gestionado desde la web) y `sudo systemctl restart
+> cloudflared`.
+
 En Cloudflare, activa **SSL/TLS → Edge Certificates → Always Use HTTPS**.
 
 ---

@@ -205,6 +205,82 @@ check "postinst del panel: no avisa si 127.0.0.1 está permitida" "$r"
 
 rm -rf "$tmp_webif"
 
+echo "== puerto del panel (run.sh, unidad systemd y ncam-ng-ctl panel port) =="
+# El puerto del panel se lee del .env, tanto a mano (run.sh) como con el servicio.
+# Se comprueba con un python de mentira que imprime los argumentos con los que se
+# arrancaría uvicorn de verdad.
+tmp_run="$(mktemp -d)"
+mkdir -p "$tmp_run/.venv/bin"
+cp panel/run.sh "$tmp_run/"
+printf '#!/bin/sh\necho "FAKE-PYTHON: $*"\n' > "$tmp_run/.venv/bin/python"
+chmod +x "$tmp_run/.venv/bin/python"
+
+printf 'NCAM_PANEL_HOST=127.0.0.1\nNCAM_PANEL_PORT=8095\n' > "$tmp_run/.env"
+out="$(sh "$tmp_run/run.sh" 2>&1)"
+if printf '%s' "$out" | grep -q -- "--host 127.0.0.1 --port 8095"; then r=0; else r=1; fi
+check "run.sh: la dirección y el puerto salen del .env" "$r"
+
+out="$(NCAM_PANEL_PORT=9000 sh "$tmp_run/run.sh" 2>&1)"
+if printf '%s' "$out" | grep -q -- "--port 9000"; then r=0; else r=1; fi
+check "run.sh: lo que venga en el entorno manda sobre el .env" "$r"
+
+printf 'NCAM_PANEL_PORT=ochomil\n' > "$tmp_run/.env"
+out="$(sh "$tmp_run/run.sh" 2>&1)" && r=1 || r=0
+if printf '%s' "$out" | grep -q "no es un número"; then r=0; else r=1; fi
+check "run.sh: un puerto no numérico avisa y no arranca" "$r"
+
+# la unidad systemd no puede volver a fijar el puerto por su cuenta: eso era lo
+# que hacía que cambiar el .env no sirviera de nada
+if grep -q -- "ExecStart=/opt/ncam-ng-panel/run.sh" packaging/ncam-panel.service; then r=0; else r=1; fi
+check "unidad systemd: arranca con run.sh (una sola fuente de verdad)" "$r"
+if grep -qE "ExecStart=.*--port|Environment=NCAM_PANEL_PORT|Environment=NCAM_PANEL_HOST" packaging/ncam-panel.service; then r=1; else r=0; fi
+check "unidad systemd: no fija host ni puerto (mandan el .env y run.sh)" "$r"
+
+tmp_cf="$(mktemp -d)"
+printf '[webif]\nNCAM_PANEL_X=1\n' > /dev/null 2>&1 || true
+cat > "$tmp_cf/.env" <<'ENV'
+NCAM_PANEL_HOST=0.0.0.0
+NCAM_PANEL_PORT=8080
+NCAM_PANEL_SECRET=secreto-de-prueba
+ENV
+cat > "$tmp_cf/cloudflared.yml" <<'CF'
+tunnel: ncpanel
+ingress:
+  - hostname: panel.ejemplo.com
+    service: http://127.0.0.1:8080
+  - service: http_status:404
+CF
+
+out="$(NCAM_PANEL_DIR="$tmp_cf" NCAM_CLOUDFLARED_CONF="$tmp_cf/cloudflared.yml" \
+	sh packaging/ncam-ng-ctl.sh --dry-run panel port 2>&1)"
+if printf '%s' "$out" | grep -q "puerto 8080" && printf '%s' "$out" | grep -q "cloudflared"; then r=0; else r=1; fi
+check "panel port: muestra el puerto y a dónde apunta el túnel" "$r"
+
+out="$(NCAM_PANEL_DIR="$tmp_cf" sh packaging/ncam-ng-ctl.sh --dry-run panel port 99999 2>&1)" && r=1 || r=0
+if printf '%s' "$out" | grep -q "no es válido"; then r=0; else r=1; fi
+check "panel port: rechaza un puerto fuera de rango" "$r"
+
+out="$(NCAM_PANEL_DIR="$tmp_cf" sh packaging/ncam-ng-ctl.sh --dry-run panel port abc 2>&1)" && r=1 || r=0
+if printf '%s' "$out" | grep -q "no es válido"; then r=0; else r=1; fi
+check "panel port: rechaza un puerto que no es un número" "$r"
+
+if [ "$(id -u)" = "0" ]; then
+	out="$(NCAM_PANEL_DIR="$tmp_cf" NCAM_CLOUDFLARED_CONF="$tmp_cf/cloudflared.yml" \
+		sh packaging/ncam-ng-ctl.sh --no-restart panel port 8090 2>&1)"
+	if grep -q "^NCAM_PANEL_PORT=8090$" "$tmp_cf/.env"; then r=0; else r=1; fi
+	check "panel port: escribe el puerto nuevo en el .env" "$r"
+	if ls "$tmp_cf"/.env.bak-* >/dev/null 2>&1; then r=0; else r=1; fi
+	check "panel port: deja copia de seguridad del .env" "$r"
+	if printf '%s' "$out" | grep -q "el túnel de Cloudflare"; then r=0; else r=1; fi
+	check "panel port: avisa de que cloudflared apunta al puerto viejo" "$r"
+	if grep -q "^NCAM_PANEL_HOST=0.0.0.0$" "$tmp_cf/.env" && grep -q "^NCAM_PANEL_SECRET=secreto-de-prueba$" "$tmp_cf/.env"; then r=0; else r=1; fi
+	check "panel port: respeta las demás claves del .env" "$r"
+else
+	echo "  [omitido] escritura real del .env (necesita root; ejecuta la suite con sudo)"
+fi
+
+rm -rf "$tmp_run" "$tmp_cf"
+
 echo "== cuentas del panel (ncam-ng-ctl admin) =="
 out="$(sh packaging/ncam-ng-ctl.sh --dry-run admin 2>&1)"
 if printf '%s' "$out" | grep -q "app.seed --list"; then r=0; else r=1; fi
@@ -245,6 +321,9 @@ check "ncam-ng-ctl --help documenta admin add" $?
 
 sh packaging/ncam-ng-ctl.sh --help 2>/dev/null | grep -q "ncam-ng-ctl webif check"
 check "ncam-ng-ctl --help documenta webif check" $?
+
+sh packaging/ncam-ng-ctl.sh --help 2>/dev/null | grep -q "ncam-ng-ctl panel port"
+check "ncam-ng-ctl --help documenta panel port" $?
 
 # el comando de siempre para cambiar una contraseña sigue funcionando
 out="$(sh packaging/ncam-ng-ctl.sh --dry-run passwd admin 2>&1)"

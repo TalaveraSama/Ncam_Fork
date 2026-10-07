@@ -85,7 +85,7 @@ Todo esto, con ejemplos y preguntas frecuentes, en
 
 | Variable | Por defecto | Descripción |
 |---|---|---|
-| `NCAM_PANEL_HOST` / `NCAM_PANEL_PORT` | `0.0.0.0` / `8080` | Escucha del panel. Detrás de un túnel/proxy, `127.0.0.1` es la opción segura. |
+| `NCAM_PANEL_HOST` / `NCAM_PANEL_PORT` | `0.0.0.0` / `8080` | Escucha del panel. Detrás de un túnel/proxy, `127.0.0.1` es la opción segura. Cambiar el puerto: `sudo ncam-ng-ctl panel port 8090` (valida, edita el `.env`, reinicia y comprueba). |
 | `NCAM_PANEL_TRUSTED_PROXIES` | `127.0.0.1,::1` | IPs/rangos de proxy de confianza (cloudflared, nginx, Caddy): con ellos se usa `CF-Connecting-IP`/`X-Forwarded-For` para la auditoría y el bloqueo por intentos. |
 | `NCAM_PANEL_SECRET` | generado en `panel/.secret_key` | Clave de firma de los JWT. |
 | `NCAM_PANEL_DB` | `panel/backend/data/panel.db` (`.deb`: `/var/lib/ncam-ng-panel/panel.db`) | Ruta de SQLite. |
