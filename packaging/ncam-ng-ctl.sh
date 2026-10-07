@@ -572,20 +572,32 @@ cloudflared_port() {   # cloudflared_port -> puerto local al que apunta el túne
 		"$CLOUDFLARED_CONF" 2>/dev/null | tail -n 1
 }
 
-env_set() {   # env_set <clave> <valor>  -> escribe la clave en el .env del panel
+env_set() {   # env_set <clave> <valor>  -> deja la clave UNA sola vez en el .env
 	key="$1"; value="$2"
+	antes="$(env_key_count "$key")"
 	bak="$PANEL_ENV.bak-$(date +%Y%m%d-%H%M%S)"
 	cp -p "$PANEL_ENV" "$bak" 2>/dev/null || true
 	tmp="$(mktemp)" || die "no se pudo crear un fichero temporal"
+	# La primera aparición se sustituye y las repetidas se eliminan: así la clave
+	# queda una sola vez (si hay dos, el panel usa la primera y es un lío).
 	awk -v k="$key" -v v="$value" '
-		BEGIN { done = 0 }
-		$0 ~ "^[[:space:]]*" k "[[:space:]]*=" { print k "=" v; done = 1; next }
+		BEGIN { done = 0; quitadas = 0 }
+		$0 ~ "^[[:space:]]*" k "[[:space:]]*=" {
+			if (!done) { print k "=" v; done = 1 } else { quitadas++ }
+			next
+		}
 		{ print }
-		END { if (!done) print k "=" v }
-	' "$PANEL_ENV" > "$tmp" || { rm -f "$tmp"; die "no se pudo preparar la edición de $PANEL_ENV"; }
+		END {
+			if (!done) print k "=" v
+			if (quitadas > 0) printf "quitadas=%d\n", quitadas > "/dev/stderr"
+		}
+	' "$PANEL_ENV" > "$tmp" 2>/dev/null || { rm -f "$tmp"; die "no se pudo preparar la edición de $PANEL_ENV"; }
 	cat "$tmp" > "$PANEL_ENV"          # se conservan propietario y permisos
 	rm -f "$tmp"
 	say "  copia de seguridad: $bak"
+	if [ "$antes" -gt 1 ] 2>/dev/null; then
+		say "  nota: la clave estaba $antes veces; ahora queda una sola"
+	fi
 }
 
 do_webif_show() {
@@ -939,7 +951,7 @@ do_panel_port() {
 			     if listen="$(listen_summary "$actual")"; then
 				say "            pero algo SÍ escucha en $listen"
 			     else
-				say "            (¿está parado el servicio? ncam-ng-ctl logs panel -n 30)"
+				say "            no hay nadie escuchando en el puerto $actual"
 			     fi ;;
 		esac
 		if listen="$(listen_summary "$actual")"; then
@@ -960,6 +972,26 @@ do_panel_port() {
 		cf="$(cloudflared_port)"
 		if [ -n "$cf" ]; then
 			say "  cloudflared:  el túnel apunta a 127.0.0.1:$cf"
+		fi
+		if [ "$code" != "200" ] && [ "$DRY" != "1" ]; then
+			# Sin respuesta: lo que de verdad hace falta saber es por qué.
+			say ""
+			say "  Por qué no responde (últimos mensajes de $PANEL_SERVICE)"
+			say "  ----------------------------------------------------------"
+			journalctl -u "$PANEL_SERVICE" -n 12 --no-pager 2>/dev/null | sed 's/^/  /' || true
+			estado="$(systemctl is-active "$PANEL_SERVICE" 2>/dev/null || true)"
+			say "  estado del servicio: ${estado:-desconocido}"
+			case "$(systemctl show -p NRestarts --value "$PANEL_SERVICE" 2>/dev/null || true)" in
+				''|0) ;;
+				*) say "  el servicio se ha reiniciado N veces: si se reinicia en bucle, el"
+				   say "  motivo está en el registro de arriba (puerto ocupado, .env roto...)" ;;
+			esac
+			for otro in 8080 8082 8090; do
+				[ "$otro" = "$actual" ] && continue
+				if listen="$(listen_summary "$otro")"; then
+					say "  ojo: en el puerto $otro escucha: $listen"
+				fi
+			done
 		fi
 		say ""
 		say "  Cambiarlo:  ncam-ng-ctl panel port NUEVO   (p. ej. 8090)"

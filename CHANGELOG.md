@@ -1,5 +1,19 @@
 # Changelog
 
+## [2.4.7] - 2026-10-07 — «sin respuesta» con el motivo delante
+
+* `ncam-ng-ctl panel port` imprime ahora, cuando el panel no responde, **por qué**:
+  los últimos mensajes de `ncam-panel`, el estado del servicio, si se está
+  reiniciando en bucle y **qué hay escuchando en los puertos vecinos** (8080, 8082,
+  8090). Antes solo decía que no había respuesta y había que ir a mirar el registro
+  uno mismo.
+* `ncam-ng-ctl panel port NUEVO` deja la clave `NCAM_PANEL_PORT` **una sola vez** en
+  el `.env`: si estaba repetida, la primera aparición se sustituye y las demás se
+  eliminan, avisando de cuántas había («la clave estaba 3 veces; ahora queda
+  una»). Antes podía quedar la clave duplicada y, como el panel usa la primera, el
+  cambio parecía no aplicarse.
+* Pruebas: 2 nuevas del instalador (73 en total).
+
 ## [2.4.6] - 2026-10-07 — «activo pero sin respuesta»: el diagnóstico que faltaba
 
 * **Arreglado un fallo sutil que desincronizaba la herramienta y el panel.** Si el

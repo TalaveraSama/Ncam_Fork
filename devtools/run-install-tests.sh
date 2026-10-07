@@ -275,6 +275,16 @@ if [ "$(id -u)" = "0" ]; then
 	check "panel port: avisa de que cloudflared apunta al puerto viejo" "$r"
 	if grep -q "^NCAM_PANEL_HOST=0.0.0.0$" "$tmp_cf/.env" && grep -q "^NCAM_PANEL_SECRET=secreto-de-prueba$" "$tmp_cf/.env"; then r=0; else r=1; fi
 	check "panel port: respeta las demás claves del .env" "$r"
+
+	# con la clave repetida, al cambiar el puerto tiene que quedar UNA sola línea
+	# (si quedan varias, el panel usa la primera y el cambio no surte efecto)
+	printf 'NCAM_PANEL_PORT=8080\nNCAM_PANEL_SECRET=x\nNCAM_PANEL_PORT=8090\n' > "$tmp_cf/.env"
+	out="$(NCAM_PANEL_DIR="$tmp_cf" sh packaging/ncam-ng-ctl.sh --no-restart panel port 8082 2>&1)"
+	n="$(grep -cE '^[[:space:]]*NCAM_PANEL_PORT[[:space:]]*=' "$tmp_cf/.env")"
+	if [ "$n" = "1" ] && grep -q "^NCAM_PANEL_PORT=8082$" "$tmp_cf/.env"; then r=0; else r=1; fi
+	check "panel port: al cambiarlo, deja una sola línea de la clave" "$r"
+	if printf '%s' "$out" | grep -q "estaba 2 veces"; then r=0; else r=1; fi
+	check "panel port: avisa de que ha quitado la línea repetida" "$r"
 else
 	echo "  [omitido] escritura real del .env (necesita root; ejecuta la suite con sudo)"
 fi
