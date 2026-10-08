@@ -246,6 +246,24 @@ def session(db_path: Optional[Path] = None) -> Iterator[sqlite3.Connection]:
         conn.close()
 
 
+@contextmanager
+def without_transaction(conn: sqlite3.Connection) -> Iterator[sqlite3.Connection]:
+    """Cierra temporalmente la transacción para operaciones lentas (red).
+
+    Algunas peticiones leen de la base de datos, tardan segundos en la red
+    (sondeo TCP de un peer, SMTP, ...) y después escriben. Si la transacción
+    de lectura se mantiene abierta durante la red, dos peticiones a la vez
+    chocan al escribir (``database is locked`` -> HTTP 500). Con este contexto
+    la lectura se confirma, la red corre sin transacción y al salir se abre
+    una transacción nueva y corta para la escritura.
+    """
+    conn.execute("COMMIT")
+    try:
+        yield conn
+    finally:
+        conn.execute("BEGIN")
+
+
 # Nombre del panel. Se guarda en los ajustes (panel.name) y lo usan los avisos
 # y el frontend; al renombrar el producto se conserva por compatibilidad la
 # variable de entorno NCAM_PANEL_NAME y el ajuste panel.name de siempre.

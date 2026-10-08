@@ -958,7 +958,10 @@ async function viewCache(el) {
 
   $("#peer-new", el).onclick = () => openPeerForm(async () => renderView());
 
-  el.addEventListener("click", async (event) => {
+  // Asignación (no addEventListener): #view se reutiliza en cada pintado y con
+  // addEventListener los manejadores se acumularían — un clic en «Probar»
+  // dispararía tantas peticiones como veces se visitó la vista.
+  el.onclick = async (event) => {
     const button = event.target.closest("button[data-peer]");
     if (!button) return;
     const id = Number(button.dataset.id);
@@ -982,7 +985,7 @@ async function viewCache(el) {
         }
       }
     } catch (error) { toast(error.message, "error"); }
-  });
+  };
 }
 
 function ncamDownload(event) {
@@ -1541,6 +1544,7 @@ async function renderView() {
   $("#view-subtitle").textContent = config.subtitle;
   const el = $("#view");
   el.innerHTML = `<p class="muted">Cargando…</p>`;
+  el.onclick = null; // cada vista instala el suyo; así no se heredan clics de otra vista
   try {
     await config.render(el);
   } catch (error) {

@@ -1,5 +1,26 @@
 # Changelog
 
+## [2.4.8] - 2026-10-08 — los peers de caché ya no dan «Error 500»
+
+* **Arreglado: un clic en «Probar» disparaba muchas peticiones a la vez.** La
+  vista *Caché y peers* añadía un manejador de clics nuevo cada vez que se
+  pintaba, sin quitar el anterior: tras visitar la vista varias veces, un solo
+  clic en Probar/Config/Editar/Borrar lanzaba tantas peticiones como visitas,
+  con su cascada de avisos. Ahora la vista instala un único manejador que se
+  sustituye en cada pintado, y `renderView()` lo limpia al cambiar de vista.
+* **Arreglado: `POST /cache/servers/{id}/test` devolvía 500 con peticiones
+  simultáneas** (`sqlite3.OperationalError: database is locked`). La petición
+  mantenía abierta la transacción SQLite durante el sondeo TCP (red, hasta
+  3 s) y después intentaba escribir; dos sondeos solapados chocaban al
+  confirmar. Ahora el sondeo corre fuera de la transacción (nuevo contexto
+  `db.without_transaction`, con el sondeo y el guardado separados en
+  `ncam.probe_tcp` + `ncam.record_cache_server_check`) y la escritura
+  posterior es corta: 12 sondeos a la vez devuelven los 12 un `200` (antes, 11
+  de 12 daban 500).
+* Pruebas: 1 nueva del panel (98 en total) con 10 sondeos concurrentes y
+  sondeo simulado lento, y 2 comprobaciones nuevas del frontend (un clic en
+  «Probar» envía una sola petición aunque la vista se haya pintado dos veces).
+
 ## [2.4.7] - 2026-10-07 — «sin respuesta» con el motivo delante
 
 * `ncam-ng-ctl panel port` imprime ahora, cuando el panel no responde, **por qué**:

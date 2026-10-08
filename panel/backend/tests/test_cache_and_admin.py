@@ -2,6 +2,11 @@
 
 from __future__ import annotations
 
+import time
+from concurrent.futures import ThreadPoolExecutor
+
+from app import ncam as ncam_module
+
 from .conftest import auth_headers
 
 
@@ -63,6 +68,49 @@ def test_cache_server_crud_and_tcp_probe(client, reseller_token, listening_port)
 
     assert client.delete(f"/api/v1/cache/servers/{server['id']}", headers=auth_headers(reseller_token)).status_code == 200
     assert client.delete(f"/api/v1/cache/servers/{closed['id']}", headers=auth_headers(reseller_token)).status_code == 200
+
+
+def test_cache_server_concurrent_probe_without_500(client, reseller_token, monkeypatch):
+    """Varios «Probar» a la vez no deben terminar en HTTP 500 (regresión).
+
+    El sondeo TCP tarda hasta segundos y corre fuera de la transacción de la
+    petición: si la transacción de lectura se mantiene abierta durante la red,
+    los UPDATE concurrentes chocan con «database is locked» (reproducido con
+    12 peticiones a la vez: 11 devolvían 500).
+    """
+    original_probe = ncam_module.probe_tcp
+
+    def slow_probe(host, port, timeout=3.0):
+        time.sleep(0.5)  # fuerza el solape de las transacciones
+        return original_probe("127.0.0.1", port, timeout=timeout)
+
+    monkeypatch.setattr(ncam_module, "probe_tcp", slow_probe)
+    created = client.post(
+        "/api/v1/cache/servers",
+        headers=auth_headers(reseller_token),
+        json={"name": "Peer concurrente", "host": "127.0.0.1", "port": 1, "protocol": "cccam"},
+    )
+    assert created.status_code == 201, created.text
+    server_id = created.json()["id"]
+
+    with ThreadPoolExecutor(max_workers=10) as pool:
+        responses = list(
+            pool.map(
+                lambda _: client.post(
+                    f"/api/v1/cache/servers/{server_id}/test",
+                    headers=auth_headers(reseller_token),
+                ),
+                range(10),
+            )
+        )
+    failures = [(response.status_code, response.text[:160]) for response in responses if response.status_code != 200]
+    assert not failures, f"peticiones con error: {failures}"
+
+    row = client.get(f"/api/v1/cache/servers/{server_id}", headers=auth_headers(reseller_token)).json()
+    assert row["last_check_at"] is not None
+    assert client.delete(
+        f"/api/v1/cache/servers/{server_id}", headers=auth_headers(reseller_token)
+    ).status_code == 200
 
 
 def test_cache_server_validation(client, reseller_token):

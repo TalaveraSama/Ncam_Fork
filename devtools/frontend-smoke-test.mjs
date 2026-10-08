@@ -216,5 +216,48 @@ const selfForm = doc.querySelector("#modal-root").innerHTML;
 check("no se puede cambiar el rol propio",
   /name="role"[^>]*disabled/.test(selfForm) && selfForm.includes("No puede cambiarse el rol a sí mismo"));
 
+// --- vista de caché: un clic en «Probar» envía una sola petición -------------
+// (regresión: viewCache añadía un listener nuevo en cada pintado sobre el
+// mismo contenedor, así que un clic disparaba tantas peticiones como veces
+// se había visitado la vista, con la cascada de «Error 500» correspondiente)
+const cacheStats = {
+  reachable: true, engine: "NCam-NG cache engine", hit_ratio: 83.4, lookups: 10,
+  entries: 5, cw_entries: 6, mem_bytes: 1024, history: [], hot_entries: [],
+  peers: { total: 1, online: 1 },
+};
+const cacheServers = { items: [{
+  id: 1, name: "Peer 1", host: "127.0.0.1", port: 12000, protocol: "cccam",
+  owner_username: "admin", priority: 0, enabled: 1, last_check_at: null,
+  last_check_ok: null, last_check_ms: null, last_check_error: null,
+}] };
+const cacheLimits = { max_time: 15, max_entries: 0, cacheex_enabled: true };
+let testPosts = 0;
+window.fetch = async (url, options = {}) => {
+  const path = String(url).replace(/^https?:\/\/[^/]+/, "").split("?")[0];
+  if ((options.method || "GET") === "POST" && path === "/api/v1/cache/servers/1/test") testPosts += 1;
+  const bodies = {
+    "/api/v1/cache/stats": cacheStats,
+    "/api/v1/cache/servers": cacheServers,
+    "/api/v1/cache/limits": cacheLimits,
+    "/api/v1/cache/servers/1/test": { id: 1, host: "127.0.0.1", port: 12000, ok: true, latency_ms: 34, error: null },
+  };
+  const body = bodies[path] ?? {};
+  return {
+    ok: true, status: 200, headers: { get: () => "application/json" },
+    json: async () => body, text: async () => JSON.stringify(body),
+  };
+};
+await window.eval(`(async () => {
+  state.user = { username: "admin", role: "super_admin", credits: 0 };
+  state.tokens = { access: "tok", refresh: "tok" };
+  state.view = "cache";
+  await renderView();
+  await renderView();
+})()`);
+check("la vista de caché se dibuja", doc.querySelectorAll('#view button[data-peer="test"]').length === 1);
+doc.querySelector('#view button[data-peer="test"]').click();
+await new Promise((resolve) => setTimeout(resolve, 300));
+check("un clic en Probar envía una sola petición aunque se pintó dos veces", testPosts === 1);
+
 console.log(failures.length ? `\n${failures.length} fallo(s)` : "\nfrontend OK");
 process.exit(failures.length ? 1 : 0);

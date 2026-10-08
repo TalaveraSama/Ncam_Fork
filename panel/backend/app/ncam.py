@@ -350,15 +350,27 @@ def probe_tcp(host: str, port: int, timeout: float = 3.0) -> tuple[bool, Optiona
         return False, None, str(exc)
 
 
-def check_cache_server(conn: sqlite3.Connection, server_id: int, host: str, port: int) -> dict[str, Any]:
-    ok, elapsed, error = probe_tcp(host, port)
+def record_cache_server_check(
+    conn: sqlite3.Connection,
+    server_id: int,
+    ok: bool,
+    elapsed_ms: Optional[int],
+    error: Optional[str],
+) -> dict[str, Any]:
+    """Guarda en la fila del peer el resultado de un sondeo TCP previo.
+
+    Está separado de :func:`probe_tcp` a propósito: el sondeo tarda hasta
+    segundos y debe ejecutarse fuera de la transacción de la petición (ver
+    ``db.without_transaction``); si no, dos «Probar» a la vez chocan con
+    ``database is locked`` y terminan en HTTP 500.
+    """
     database.execute(
         conn,
         "UPDATE cache_servers SET last_check_at = ?, last_check_ok = ?, last_check_ms = ?,"
         " last_check_error = ? WHERE id = ?",
-        (database.utcnow(), 1 if ok else 0, elapsed, error, server_id),
+        (database.utcnow(), 1 if ok else 0, elapsed_ms, error, server_id),
     )
-    return {"ok": ok, "latency_ms": elapsed, "error": error}
+    return {"ok": ok, "latency_ms": elapsed_ms, "error": error}
 
 
 # ---------------------------------------------------------------------------

@@ -201,7 +201,14 @@ def servers_test(
 ):
     """Prueba de conectividad TCP real contra el peer."""
     server = get_cache_server(conn, ctx, server_id)
-    result = ncam.check_cache_server(conn, server_id, str(server["host"]), int(server["port"]))
+    host, port = str(server["host"]), int(server["port"])
+    # El sondeo tarda hasta segundos: corre fuera de la transacción de la
+    # petición para que dos «Probar» a la vez no choquen con «database is
+    # locked» (HTTP 500). La escritura posterior es corta y se confirma con
+    # la auditoría al terminar la petición.
+    with database.without_transaction(conn):
+        ok, elapsed, error = ncam.probe_tcp(host, port)
+    result = ncam.record_cache_server_check(conn, server_id, ok, elapsed, error)
     audit(
         conn,
         ctx,
@@ -211,7 +218,7 @@ def servers_test(
         {"ok": result["ok"], "latency_ms": result["latency_ms"]},
         client_ip(request),
     )
-    return {"id": server_id, "host": server["host"], "port": server["port"], **result}
+    return {"id": server_id, "host": host, "port": port, **result}
 
 
 @router.get("/servers/{server_id}/config")
