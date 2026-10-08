@@ -23,6 +23,8 @@
 * Pruebas: nuevo `devtools/test-newcamd-multicaid.sh` (23 comprobaciones:
   multi-CAID, CAID 0, puerto único, cuenta limitada, WebIf y límite de 16)
   con cliente de pruebas `devtools/ncd_test_client.c`, enganchado al CI.
+  (`config.sh` solo edita `config.h`, no lo crea: sigue versionado como
+  plantilla por defecto, igual que en NCam original.)
 
 ## [2.5.0] - 2026-10-08 — el panel ya controla el daemon
 

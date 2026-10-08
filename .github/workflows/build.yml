@@ -52,7 +52,7 @@ jobs:
           if [ ${{ github.event_name }} == 'workflow_dispatch' ]; then
             make ${{ github.event.inputs.use }}
           else
-            make USE_LIBCURL=1 USE_LIBUSB=1 EXTRA_CFLAGS="-DOPENSSL_API_COMPAT=0x10101000L -DWITH_SENDCMD" > /tmp/make.log 2>&1 || (echo "::error::$(grep -n -iE 'error|undefined reference|no such file' /tmp/make.log | head -n 25 | sed -e 's/%/%25/g' | tr '\n' '|' | sed 's/|/%0A/g')"; echo "::error::TAIL: $(tail -n 4 /tmp/make.log | sed -e 's/%/%25/g' | tr '\n' '|' | sed 's/|/%0A/g')"; exit 1)
+            make USE_LIBCURL=1 USE_LIBUSB=1 EXTRA_CFLAGS="-DOPENSSL_API_COMPAT=0x10101000L -DWITH_SENDCMD"
           fi
       - name: Test
         run: |
