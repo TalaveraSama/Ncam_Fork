@@ -41,7 +41,7 @@ try() {
 	fi
 }
 
-BIN="$(ls -1t Distribution/ncam-Unofficial-*-x86_64-linux-gnu 2>/dev/null | grep -v '\.debug$' | head -n1)"
+BIN="$(ls -1t Distribution/ncam-Unofficial-* 2>/dev/null | grep -v '\.debug$' | head -n1)"
 if [ -z "$BIN" ]; then
 	echo "No hay daemon compilado en Distribution/ (ejecuta ./config.sh ... && make primero)"
 	exit 1

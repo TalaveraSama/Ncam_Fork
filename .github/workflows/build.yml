@@ -64,4 +64,10 @@ jobs:
           ${{github.workspace}}/Distribution/ncam*debug -V
       - name: Test newcamd multi-CAID
         run: |
-          sh ${{github.workspace}}/devtools/test-newcamd-multicaid.sh
+          sh ${{github.workspace}}/devtools/test-newcamd-multicaid.sh > /tmp/ncdtest.log 2>&1; code=$?
+          tail -n 30 /tmp/ncdtest.log
+          if [ $code -ne 0 ]; then
+            detail=$(grep -E "FALLO|comprobaciones|omitida|No hay daemon" /tmp/ncdtest.log | head -n 9 | sed 's/%/%25/g' | tr '\n' '~' | sed 's/~/%0A/g')
+            echo "::error title=Test newcamd multi-CAID::$detail"
+          fi
+          exit $code
