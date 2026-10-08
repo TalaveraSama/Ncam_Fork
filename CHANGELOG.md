@@ -1,5 +1,34 @@
 # Changelog
 
+## [2.5.0] - 2026-10-08 — el panel ya controla el daemon
+
+* **Nuevo: aplicar líneas, peers y ajustes en caliente, sin reiniciar.**
+  El super admin puede pulsar **Aplicar** en una línea (crea/actualiza la
+  cuenta en el daemon y guarda `ncam.user`), en un peer (crea/actualiza el
+  reader, lo reinicia y guarda `ncam.server`) o **Guardar y aplicar** en los
+  ajustes `[cache]`; la nueva vista **Daemon NCam** muestra el estado y
+  permite reiniciar el proceso. Todo queda en la auditoría y cada línea/peer
+  recuerda su última aplicación (fecha y resultado).
+* **Nuevo API** (control solo para super admin): `POST /lines/{id}/apply`,
+  `POST /cache/servers/{id}/apply`, `POST /cache/settings/apply`,
+  `GET /daemon/status`, `POST /daemon/restart`.
+* **Arregladas las claves de configuración generadas**: los bloques `[reader]`
+  emitían `cachex`/`cachex_mode`/`cachex_maxhop` y `priority`, que no existen
+  en el daemon (se ignoraban en silencio); ahora emiten
+  `cacheex = 3` / `cacheex_maxhop = 2`. Los bloques `[account]` ya no emiten
+  `cacheex_disable`, que tampoco existe. `priority` sigue ordenando en el
+  panel, pero solo ahí.
+* Las acciones de control no dan 500: si el daemon no está accesible, las
+  credenciales no coinciden (`httppwd`), está en `httpreadonly` o no puede
+  escribir su configuración, devuelven `{ok: false, message}` con el motivo.
+* El simulador del WebIf (`panel/tools/mock_ncam_webif.py`) ahora imita
+  también el control (guardar usuarios/readers, ejecutar `[cache]`, reiniciar)
+  con los marcadores del daemon real, y se puede levantar en proceso para las
+  pruebas (`start_server`).
+* Pruebas: 11 nuevas del panel (109 en total) contra el simulador y 4
+  comprobaciones nuevas del frontend (botones Aplicar, vista del daemon,
+  reinicio con confirmación).
+
 ## [2.4.9] - 2026-10-08 — desinstalador
 
 * Nuevo `devtools/uninstall.sh`: detecta instalaciones por paquetes `.deb`

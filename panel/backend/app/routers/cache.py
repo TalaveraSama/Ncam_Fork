@@ -10,13 +10,14 @@ from fastapi import APIRouter, Depends, Query, Request, Response, status
 from .. import db as database
 from .. import ncam
 from ..models import CacheServerCreate, CacheServerUpdate
-from ..security import AuthContext, client_ip, current_user, get_db
+from ..security import AuthContext, client_ip, current_user, get_db, require_super_admin
 from ..services import (
     audit,
     create_cache_server,
     delete_cache_server,
     get_cache_server,
     list_cache_servers,
+    record_cache_server_apply,
     record_snapshot,
     row_to_dict,
     timeseries,
@@ -227,6 +228,62 @@ def servers_config(
 ):
     server = get_cache_server(conn, ctx, server_id)
     return {"block": ncam.render_cache_peer_config(server)}
+
+
+@router.post("/servers/{server_id}/apply")
+def servers_apply(
+    server_id: int,
+    request: Request,
+    ctx: AuthContext = Depends(require_super_admin),
+    conn: sqlite3.Connection = Depends(get_db),
+):
+    """Crea o actualiza el reader en el daemon NCam (solo super admin).
+
+    El daemon lo aplica en memoria, reinicia el reader y persiste ncam.server.
+    """
+    server = get_cache_server(conn, ctx, server_id)
+    label = ncam.peer_reader_label(server)
+    params = ncam.peer_to_reader_params(server)
+    with database.without_transaction(conn):
+        result = ncam.apply_reader(conn, label, params)
+    record_cache_server_apply(conn, server_id, bool(result["ok"]), str(result["message"]))
+    audit(
+        conn,
+        ctx,
+        "cache_server.apply",
+        "cache_server",
+        server_id,
+        {"ok": result["ok"], "created": result.get("created"), "label": label},
+        client_ip(request),
+    )
+    applied = row_to_dict(get_cache_server(conn, ctx, server_id), skip=("password",))
+    return {"id": server_id, "label": label, **result, "server": applied}
+
+
+@router.post("/settings/apply")
+def cache_settings_apply(
+    request: Request,
+    ctx: AuthContext = Depends(require_super_admin),
+    conn: sqlite3.Connection = Depends(get_db),
+):
+    """Aplica la sección [cache] del panel en el daemon (solo super admin)."""
+    applied_settings = {
+        "max_time": int(database.get_setting(conn, "ncam.cache.max_time", "15") or 15),
+        "max_entries": int(database.get_setting(conn, "ncam.cache.max_entries", "0") or 0),
+        "cacheex_enable": database.get_setting(conn, "ncam.cache.cacheex_enable", "1") == "1",
+    }
+    with database.without_transaction(conn):
+        result = ncam.apply_cache_section(conn, **applied_settings)
+    audit(
+        conn,
+        ctx,
+        "cache.settings_apply",
+        "cache",
+        None,
+        {"ok": result["ok"], **applied_settings},
+        client_ip(request),
+    )
+    return {"applied": applied_settings, **result}
 
 
 @router.get("/limits")

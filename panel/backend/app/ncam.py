@@ -117,16 +117,22 @@ def _digest_authorization(
     return "Digest " + ", ".join(parts)
 
 
-def _get_json(path: str, params: dict[str, str], timeout: Optional[float] = None,
-              credentials: Optional[tuple[str, str]] = None,
-              base_url: Optional[str] = None) -> dict[str, Any]:
+def _fetch_text(path: str, params: dict[str, str], timeout: Optional[float] = None,
+                credentials: Optional[tuple[str, str]] = None,
+                base_url: Optional[str] = None) -> str:
+    """GET al WebIf con autenticación (Basic y reto Digest MD5).
+
+    Devuelve el cuerpo como texto; las lecturas JSON (func:`_get_json`) y las
+    páginas HTML de control (guardar reader/cuenta, reiniciar) comparten este
+    transporte. Lanza :class:`NcamUnavailable` con el motivo legible.
+    """
     base = (base_url or _webif_url()).rstrip("/")
     query = "&".join(f"{quote(key)}={quote(value)}" for key, value in params.items())
     url = f"{base}{path}?{query}" if query else f"{base}{path}"
     request_uri = f"{path}?{query}" if query else path
 
     def _fetch(authorization: Optional[str] = None) -> str:
-        request = Request(url, headers={"Accept": "application/json", "User-Agent": "NCam-NG-Panel"})
+        request = Request(url, headers={"Accept": "*/*", "User-Agent": "NCam-NG-Panel"})
         if authorization:
             request.add_header("Authorization", authorization)
         with urlopen(request, timeout=timeout or settings.ncam_timeout) as response:
@@ -138,7 +144,7 @@ def _get_json(path: str, params: dict[str, str], timeout: Optional[float] = None
             # versiones): se prueba Basic y, si lo rechaza, se responde al reto
             token = base64.b64encode(f"{credentials[0]}:{credentials[1]}".encode()).decode()
             try:
-                body = _fetch(f"Basic {token}")
+                return _fetch(f"Basic {token}")
             except HTTPError as exc:
                 challenge_header = exc.headers.get("WWW-Authenticate", "") if exc.headers else ""
                 if exc.code != 401 or not credentials[1]:
@@ -149,9 +155,8 @@ def _get_json(path: str, params: dict[str, str], timeout: Optional[float] = None
                 digest = _digest_authorization(
                     credentials[0], credentials[1], "GET", request_uri, challenge
                 )
-                body = _fetch(digest)
-        else:
-            body = _fetch()
+                return _fetch(digest)
+        return _fetch()
     except HTTPError as exc:
         if exc.code == 401:
             raise NcamUnavailable(
@@ -170,6 +175,11 @@ def _get_json(path: str, params: dict[str, str], timeout: Optional[float] = None
     except (URLError, socket.timeout, OSError) as exc:
         raise NcamUnavailable(f"No se pudo contactar el WebIf de NCam ({exc})") from exc
 
+
+def _get_json(path: str, params: dict[str, str], timeout: Optional[float] = None,
+              credentials: Optional[tuple[str, str]] = None,
+              base_url: Optional[str] = None) -> dict[str, Any]:
+    body = _fetch_text(path, params, timeout=timeout, credentials=credentials, base_url=base_url)
     try:
         # el WebIf puede devolver JSONP si se pasa callback
         if body.startswith("(") or body.lstrip().startswith("("):
@@ -436,8 +446,9 @@ def render_account_config(line: sqlite3.Row | dict[str, Any]) -> str:
         entries.append(("cacheex", str(data["cacheex_mode"])))
         if int(data.get("cacheex_maxhop") or 0) > 0:
             entries.append(("cacheex_maxhop", str(data["cacheex_maxhop"])))
-    if int(data.get("cacheex_disable") or 0):
-        entries.append(("cacheex_disable", "1"))
+    # ``cacheex_disable`` no existe como clave del daemon (se ignora en
+    # silencio), así que no se emite: el interruptor queda guardado en el
+    # panel como dato informativo.
     # conexiones simultáneas que admite la cuenta (1 = solo una)
     connections = int(data.get("max_connections") or 1)
     if connections != 1:
@@ -471,13 +482,14 @@ def render_cache_peer_config(server: sqlite3.Row | dict[str, Any], username: Opt
         lines.append(f"password        = {data['password']}")
     if data.get("node_id"):
         lines.append(f"caid            = {data['node_id']}")
+    # OJO con los nombres: el daemon solo entiende ``cacheex`` / ``cacheex_maxhop``
+    # (``cachex*`` no existe y se ignora en silencio). La prioridad es solo un
+    # orden interno del panel: no hay clave ``priority`` en ncam.server.
     lines.extend(
         [
             "group           = 1",
-            "cachex          = 3",
-            "cachex_mode     = 1",
-            "cachex_maxhop   = 2",
-            f"priority        = {int(data.get('priority') or 0)}",
+            "cacheex         = 3",
+            "cacheex_maxhop  = 2",
             f"enable          = {1 if int(data.get('enabled', 1)) else 0}",
         ]
     )
@@ -588,3 +600,250 @@ def export_line(
             indent=2,
         )
     raise ValueError(f"Formato no soportado: {fmt}")
+
+
+# ---------------------------------------------------------------------------
+# control del daemon (aplicar peers/líneas/ajustes y reiniciar)
+#
+# El WebIf del daemon expone el control por GET autenticado (el mismo Digest
+# de las lecturas): ``user_edit.html`` / ``readerconfig.html`` / ``config.html``
+# aplican en memoria y persisten en ncam.user/ncam.server/ncam.conf, y
+# ``shutdown.html`` reinicia. Como las respuestas son páginas HTML, el éxito
+# se detecta por los mensajes que emite el propio daemon.
+# ---------------------------------------------------------------------------
+USER_SAVED_MARKERS = (
+    "User Account updated and saved",
+    "New user has been added with default settings",
+    "New user has been added with cloned settings",
+)
+USER_CREATED_MARKERS = (
+    "New user has been added with default settings",
+    "New user has been added with cloned settings",
+)
+READER_SAVED_MARKER = "Reader config updated and saved"
+READER_ADDED_MARKER = "New Reader has been added with default settings"
+CONFIG_SAVED_MARKER = "Configuration was saved."
+
+
+def _control_params(conn: Optional[sqlite3.Connection]) -> tuple[tuple[str, str], str]:
+    """Credenciales y URL efectiva del WebIf para las acciones de control."""
+    return _credentials(conn), _webif_url(conn)
+
+
+def fetch_reader_labels(conn: Optional[sqlite3.Connection] = None) -> dict[str, Any]:
+    """Etiquetas de los readers que conoce el daemon (``part=readerlist``)."""
+    try:
+        payload = _get_json(
+            "/ncamapi.json",
+            {"part": "readerlist"},
+            credentials=_credentials(conn),
+            base_url=_webif_url(conn),
+        )
+    except NcamUnavailable as exc:
+        return {"reachable": False, "error": str(exc), "labels": []}
+    readers = ((payload or {}).get("ncam") or {}).get("readers") or []
+    return {"reachable": True, "labels": [str(item.get("label", "")) for item in readers if isinstance(item, dict)]}
+
+
+def peer_reader_label(server: sqlite3.Row | dict[str, Any]) -> str:
+    """Etiqueta del reader en el daemon para un peer del panel."""
+    return str(dict(server).get("name") or "cacheex_peer").replace(" ", "_")
+
+
+def peer_to_reader_params(server: sqlite3.Row | dict[str, Any]) -> dict[str, str]:
+    """Traduce un peer del panel a parámetros del reader del daemon.
+
+    Usa exactamente las claves de ``ncam-config-reader.c`` (``cacheex``, no
+    ``cachex``) y omite ``node_id`` cuando no es una lista de CAIDs válida.
+    """
+    data = dict(server)
+    protocol = str(data.get("protocol") or "cccam")
+    params = {
+        "label": peer_reader_label(data),
+        "protocol": protocol,
+        "device": f"{data.get('host')},{data.get('port')}",
+        "group": "1",
+        "cacheex": "3",
+        "cacheex_maxhop": "2",
+        "enable": "1" if int(data.get("enabled", 1)) else "0",
+    }
+    if data.get("username"):
+        params["user"] = str(data["username"])
+    if data.get("password"):
+        params["password"] = str(data["password"])
+    if data.get("node_id"):
+        try:
+            caids = normalize_caids(str(data["node_id"]))
+        except ValueError:
+            caids = ""
+        if caids:
+            params["caid"] = caids
+    return params
+
+
+def line_to_account_params(line: sqlite3.Row | dict[str, Any]) -> dict[str, str]:
+    """Traduce una línea del panel a parámetros de cuenta del daemon.
+
+    Espejo de :func:`render_account_config` con las claves de
+    ``ncam-config-account.c``. Las líneas suspendidas o caducadas se aplican
+    con ``disabled=1`` (las nuevas del WebIf nacen desactivadas, así que las
+    activas llevan ``disabled=0`` explícito).
+    """
+    from datetime import datetime, timezone
+
+    data = dict(line)
+    params = {
+        "user": str(data["username"]),
+        "pwd": str(data["password"]),
+        "group": str(data.get("group_name") or "1"),
+        "uniq": "1",
+        "sleep": "0",
+        "monlevel": "1",
+        "au": "1",
+    }
+    caids = normalize_caids(data.get("caid_allow"))
+    if caids:
+        params["caid"] = caids
+    if int(data.get("cacheex_mode") or 0) > 0:
+        params["cacheex"] = str(data["cacheex_mode"])
+        if int(data.get("cacheex_maxhop") or 0) > 0:
+            params["cacheex_maxhop"] = str(data["cacheex_maxhop"])
+    connections = int(data.get("max_connections") or 1)
+    if connections != 1:
+        params["max_connections"] = str(connections)
+    hops = data.get("cccmaxhops")
+    if hops is not None and int(hops) >= 0:
+        params["cccmaxhops"] = str(int(hops))
+    if data.get("expires_at"):
+        try:
+            expires = datetime.fromisoformat(str(data["expires_at"]))
+            params["expdate"] = expires.strftime("%Y-%m-%d")
+        except ValueError:
+            pass
+    disabled = str(data.get("status") or "") == "suspended"
+    if not disabled and data.get("expires_at"):
+        try:
+            expires = datetime.fromisoformat(str(data["expires_at"]))
+            if expires.tzinfo is None:
+                expires = expires.replace(tzinfo=timezone.utc)
+            disabled = expires < datetime.now(timezone.utc)
+        except ValueError:
+            pass
+    params["disabled"] = "1" if disabled else "0"
+    return params
+
+
+def apply_account(
+    conn: Optional[sqlite3.Connection], username: str, params: dict[str, str]
+) -> dict[str, Any]:
+    """Crea o actualiza una cuenta en el daemon (``user_edit.html``)."""
+    credentials, base_url = _control_params(conn)
+    try:
+        body = _fetch_text(
+            "/user_edit.html",
+            {"action": "Save", "user": username, **params},
+            credentials=credentials,
+            base_url=base_url,
+        )
+    except NcamUnavailable as exc:
+        return {"ok": False, "message": str(exc), "created": False}
+    if "Write Config failed!" in body:
+        return {"ok": False, "message": "El daemon no pudo escribir ncam.user (¿permiso denegado?)", "created": False}
+    if any(marker in body for marker in USER_SAVED_MARKERS):
+        created = any(marker in body for marker in USER_CREATED_MARKERS)
+        return {
+            "ok": True,
+            "created": created,
+            "message": f"Cuenta '{username}' {'creada' if created else 'actualizada'} en NCam",
+        }
+    return {"ok": False, "message": "El daemon no confirmó el guardado de la cuenta", "created": False}
+
+
+def apply_reader(
+    conn: Optional[sqlite3.Connection], label: str, params: dict[str, str]
+) -> dict[str, Any]:
+    """Crea o actualiza un reader en el daemon (``readerconfig.html``).
+
+    Si la etiqueta no existe se da de alta primero (``action=Add``) y después
+    se guardan todos los parámetros (``action=Save``), que además reinicia el
+    reader y persiste ncam.server.
+    """
+    credentials, base_url = _control_params(conn)
+    try:
+        known = fetch_reader_labels(conn)
+        if not known.get("reachable"):
+            return {"ok": False, "message": str(known.get("error", "daemon inalcanzable")), "created": False}
+        created = False
+        if label not in known.get("labels", []):
+            added = _fetch_text(
+                "/readerconfig.html",
+                {"action": "Add", "label": label, "protocol": params.get("protocol", "cccam")},
+                credentials=credentials,
+                base_url=base_url,
+            )
+            if READER_ADDED_MARKER not in added:
+                return {"ok": False, "message": f"El daemon no creó el reader '{label}'", "created": False}
+            created = True
+        body = _fetch_text(
+            "/readerconfig.html",
+            {"action": "Save", "reader": label, **params},
+            credentials=credentials,
+            base_url=base_url,
+        )
+    except NcamUnavailable as exc:
+        return {"ok": False, "message": str(exc), "created": False}
+    if "Write Config failed!" in body:
+        return {"ok": False, "message": "El daemon no pudo escribir ncam.server (¿permiso denegado?)", "created": created}
+    if READER_SAVED_MARKER in body:
+        return {
+            "ok": True,
+            "created": created,
+            "message": f"Reader '{label}' {'creado' if created else 'actualizado'} en NCam",
+        }
+    return {"ok": False, "message": f"El daemon no confirmó el guardado del reader '{label}'", "created": created}
+
+
+def apply_cache_section(
+    conn: Optional[sqlite3.Connection], max_time: int, max_entries: int, cacheex_enable: bool
+) -> dict[str, Any]:
+    """Aplica la sección ``[cache]`` en el daemon (``config.html``)."""
+    credentials, base_url = _control_params(conn)
+    try:
+        body = _fetch_text(
+            "/config.html",
+            {
+                "part": "cache",
+                "action": "execute",
+                "max_time": str(max_time),
+                "max_entries": str(max_entries),
+                "cacheexenablestats": "1" if cacheex_enable else "0",
+            },
+            credentials=credentials,
+            base_url=base_url,
+        )
+    except NcamUnavailable as exc:
+        return {"ok": False, "message": str(exc)}
+    if "readonly mode" in body:
+        return {"ok": False, "message": "El WebIf está en modo solo lectura (httpreadonly=1)"}
+    if "Failed to write config file" in body:
+        return {"ok": False, "message": "El daemon no pudo escribir ncam.conf (¿permiso denegado?)"}
+    if CONFIG_SAVED_MARKER in body:
+        return {"ok": True, "message": "Sección [cache] aplicada en NCam"}
+    return {"ok": False, "message": "El daemon no confirmó el guardado de [cache]"}
+
+
+def restart_daemon(conn: Optional[sqlite3.Connection] = None) -> dict[str, Any]:
+    """Ordena al daemon reiniciarse (``shutdown.html``).
+
+    El proceso sale con código 99 y systemd (``Restart=on-failure``) lo
+    levanta de nuevo en unos segundos. Si el daemon se arrancó a mano, sale
+    y no vuelve solo: la pantalla lo advierte.
+    """
+    credentials, base_url = _control_params(conn)
+    try:
+        _fetch_text(
+            "/shutdown.html", {"action": "restart"}, credentials=credentials, base_url=base_url
+        )
+    except NcamUnavailable as exc:
+        return {"ok": False, "message": str(exc)}
+    return {"ok": True, "message": "Reinicio ordenado: NCam vuelve en unos segundos"}

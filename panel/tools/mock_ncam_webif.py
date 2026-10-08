@@ -42,6 +42,11 @@ class MockState:
         self.evicted_ttl = 9820
         self.evicted_lru = 0
         self.cwc_rejected = 3
+        # control desde el panel (imitan al daemon de verdad)
+        self.readers: dict = {}        # label -> params del último Add/Save
+        self.applied_users: dict = {}  # user -> params del último Save
+        self.cache_section: dict = {}  # sección [cache] aplicada
+        self.restarts = 0              # veces que se pidió action=restart
         self.hot_entries = [
             {"caid": "0100", "prid": "000000", "srvid": "0001", "hits": 8421, "from_csp": 0, "from_cacheex": 1, "from_localcards": 0},
             {"caid": "0500", "prid": "000000", "srvid": "0A2B", "hits": 5310, "from_csp": 0, "from_cacheex": 1, "from_localcards": 0},
@@ -182,34 +187,90 @@ def status_payload() -> dict:
     }
 
 
+def readerlist_payload() -> dict:
+    """Mismo contrato que ``part=readerlist`` del daemon (solo lo que usa el panel)."""
+    return {"ncam": {"readers": [{"label": label} for label in STATE.readers]}}
+
+
 class Handler(BaseHTTPRequestHandler):
     server_version = "MockNcamWebIf/1.0"
 
-    def do_GET(self) -> None:  # noqa: N802
-        parsed = urlparse(self.path)
-        params = parse_qs(parsed.query)
-
-        if parsed.path != "/ncamapi.json":
-            self.send_error(404, "solo /ncamapi.json (simulador)")
-            return
-
-        part = (params.get("part") or ["status"])[0]
-        if part == "cachestats":
-            payload = cachestats_payload()
-        elif part == "userstats":
-            payload = userstats_payload((params.get("user") or [None])[0])
-        else:
-            payload = status_payload()
-        body = json.dumps(payload, indent=1).encode()
-
+    def _send(self, body: bytes, content_type: str = "text/javascript") -> None:
         self.send_response(200)
-        self.send_header("Content-Type", "text/javascript")
+        self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
 
+    def _send_html(self, text: str) -> None:
+        self._send(f"<html><body>{text}</body></html>".encode(), "text/html")
+
+    def do_GET(self) -> None:  # noqa: N802
+        parsed = urlparse(self.path)
+        params = parse_qs(parsed.query)
+        first = {key: values[0] for key, values in params.items() if values}
+
+        if parsed.path == "/ncamapi.json":
+            part = first.get("part", "status")
+            if part == "cachestats":
+                payload = cachestats_payload()
+            elif part == "userstats":
+                payload = userstats_payload(first.get("user"))
+            elif part == "readerlist":
+                payload = readerlist_payload()
+            else:
+                payload = status_payload()
+            self._send(json.dumps(payload, indent=1).encode())
+            return
+
+        # --- control desde el panel (mismos marcadores que el daemon) ---
+        if parsed.path == "/shutdown.html" and first.get("action") == "restart":
+            STATE.restarts += 1
+            self._send_html("NCam is restarting now")
+            return
+
+        if parsed.path == "/user_edit.html" and first.get("action") == "Save":
+            user = first.get("user", "")
+            created = user not in STATE.applied_users
+            STATE.applied_users[user] = first
+            if created:
+                # como el daemon: crea con valores por defecto y aplica en la misma llamada
+                self._send_html("New user has been added with default settings User Account updated and saved")
+            else:
+                self._send_html("User Account updated and saved")
+            return
+
+        if parsed.path == "/readerconfig.html" and first.get("action") == "Add":
+            label = first.get("label", "")
+            STATE.readers[label] = dict(first)
+            self._send_html("New Reader has been added with default settings")
+            return
+
+        if parsed.path == "/readerconfig.html" and first.get("action") == "Save":
+            label = first.get("reader") or first.get("label", "")
+            if label not in STATE.readers:
+                self._send_html("")  # como el daemon: sin reader no hay nada que guardar
+                return
+            STATE.readers[label] = dict(first)
+            self._send_html("Reader config updated and saved")
+            return
+
+        if parsed.path == "/config.html" and first.get("part") == "cache" and first.get("action") == "execute":
+            STATE.cache_section = {k: v for k, v in first.items() if k not in {"part", "action"}}
+            self._send_html("Configuration was saved.")
+            return
+
+        self.send_error(404, "ruta no simulada")
+
     def log_message(self, fmt: str, *args) -> None:  # silenciar accesos
         pass
+
+
+def start_server(host: str = "127.0.0.1", port: int = 0) -> ThreadingHTTPServer:
+    """Crea el simulador (para las pruebas: puerto 0 = efímero)."""
+    server = ThreadingHTTPServer((host, port), Handler)
+    server.daemon_threads = True
+    return server
 
 
 def main() -> None:
@@ -229,9 +290,10 @@ def main() -> None:
     else:
         MOCK_USERS = [name.strip() for name in args.users.split(",") if name.strip()] or ["demo_linea"]
 
-    server = ThreadingHTTPServer((args.host, args.port), Handler)
+    server = start_server(args.host, args.port)
     print(f"Simulador del WebIf de NCam escuchando en http://{args.host}:{args.port}")
-    print("Endpoints: /ncamapi.json?part=cachestats | part=status | part=userstats")
+    print("Endpoints: /ncamapi.json?part=cachestats | part=status | part=userstats | part=readerlist")
+    print("Control: shutdown.html, user_edit.html, readerconfig.html, config.html")
     print(f"Cuentas simuladas: {', '.join(MOCK_USERS)}")
     try:
         server.serve_forever()

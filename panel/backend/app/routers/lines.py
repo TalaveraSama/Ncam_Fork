@@ -10,7 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response,
 from .. import db as database
 from .. import ncam
 from ..models import LineCreate, LineRenew, LineUpdate
-from ..security import AuthContext, client_ip, current_user, get_db
+from ..security import AuthContext, client_ip, current_user, get_db, require_super_admin
 from ..services import (
     audit,
     create_line,
@@ -18,6 +18,7 @@ from ..services import (
     get_line,
     line_effective_status,
     list_lines,
+    record_line_apply,
     renew_line,
     reset_line_password,
     reveal_line_password,
@@ -127,6 +128,35 @@ def lines_reveal_password(
     password = reveal_line_password(conn, ctx, line_id)
     audit(conn, ctx, "line.password_reveal.done", "line", line_id, {}, client_ip(request))
     return {"password": password}
+
+
+@router.post("/{line_id}/apply")
+def lines_apply(
+    line_id: int,
+    request: Request,
+    ctx: AuthContext = Depends(require_super_admin),
+    conn: sqlite3.Connection = Depends(get_db),
+):
+    """Crea o actualiza la cuenta en el daemon NCam (solo super admin).
+
+    El daemon la aplica en memoria y persiste ncam.user. Las líneas
+    suspendidas o caducadas se aplican desactivadas.
+    """
+    line = get_line(conn, ctx, line_id)
+    params = ncam.line_to_account_params(line)
+    with database.without_transaction(conn):
+        result = ncam.apply_account(conn, str(line["username"]), params)
+    record_line_apply(conn, line_id, bool(result["ok"]), str(result["message"]))
+    audit(
+        conn,
+        ctx,
+        "line.apply",
+        "line",
+        line_id,
+        {"ok": result["ok"], "created": result.get("created"), "username": line["username"]},
+        client_ip(request),
+    )
+    return {"id": line_id, "username": line["username"], **result, "line": _public(get_line(conn, ctx, line_id))}
 
 
 @router.get("/{line_id}/export")

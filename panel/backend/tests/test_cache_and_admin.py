@@ -64,7 +64,10 @@ def test_cache_server_crud_and_tcp_probe(client, reseller_token, listening_port)
     # config generada para ncam.server
     block = client.get(f"/api/v1/cache/servers/{server['id']}/config", headers=auth_headers(reseller_token)).json()["block"]
     assert "[reader]" in block
-    assert "cachex" in block
+    assert "cacheex         = 3" in block
+    assert "cacheex_maxhop  = 2" in block
+    assert "cachex " not in block and "cachex_" not in block  # claves inexistentes en el daemon
+    assert "priority" not in block  # sin clave en ncam.server: solo ordena el panel
 
     assert client.delete(f"/api/v1/cache/servers/{server['id']}", headers=auth_headers(reseller_token)).status_code == 200
     assert client.delete(f"/api/v1/cache/servers/{closed['id']}", headers=auth_headers(reseller_token)).status_code == 200

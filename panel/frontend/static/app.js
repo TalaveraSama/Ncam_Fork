@@ -245,6 +245,7 @@ const NAV = [
   { id: "transactions", label: "Créditos", icon: "🪙", roles: ["super_admin", "reseller", "user"] },
   { id: "audit", label: "Auditoría", icon: "🛡", roles: ["super_admin", "reseller"] },
   { id: "settings", label: "Ajustes", icon: "⚙", roles: ["super_admin"] },
+  { id: "daemon", label: "Daemon NCam", icon: "⏻", roles: ["super_admin"] },
 ];
 
 function renderNav() {
@@ -382,6 +383,7 @@ async function viewDashboard(el) {
 /* ---------------------------------------------------------------- líneas */
 async function viewLines(el) {
   const canManage = state.user.role !== "user";
+  const isSuper = state.user.role === "super_admin";
   const [lines, accounts] = await Promise.all([
     api("/lines"),
     canManage && state.user.role !== "user" ? api("/accounts").catch(() => ({ items: [] })) : Promise.resolve({ items: [] }),
@@ -432,6 +434,7 @@ async function viewLines(el) {
           <button class="btn small ghost" data-act="export" data-id="${line.id}">Exportar</button>
           <button class="btn small ghost" data-act="pwd" data-id="${line.id}">Ver clave</button>
           ${canManage ? `<button class="btn small ghost" data-act="edit" data-id="${line.id}">Editar</button>` : ""}
+          ${isSuper ? `<button class="btn small blue" data-act="apply" data-id="${line.id}" title="Crea o actualiza la cuenta en el daemon NCam">Aplicar</button>` : ""}
           ${canManage ? `<button class="btn small blue" data-act="renew" data-id="${line.id}">+30 días</button>` : ""}
           ${canManage ? `<button class="btn small danger" data-act="del" data-id="${line.id}">Borrar</button>` : ""}
         </td>
@@ -490,6 +493,17 @@ async function viewLines(el) {
           <div class="actions">${copyButton(`${line.username}:${data.password}`)}</div>`);
       } else if (button.dataset.act === "export") {
         openExportDialog(line);
+      } else if (button.dataset.act === "apply") {
+        button.disabled = true;
+        try {
+          const result = await api(`/lines/${id}/apply`, { method: "POST" });
+          toast(result.ok
+            ? `Cuenta ${result.created ? "creada" : "actualizada"} en el daemon${result.message && !/^Cuenta /.test(result.message) ? `: ${result.message}` : ""}`
+            : `El daemon no la aceptó: ${result.message}`, result.ok ? "ok" : "error");
+          await reload();
+        } finally {
+          button.disabled = false;
+        }
       } else if (button.dataset.act === "edit") {
         openLineForm(owners, reload, line);
       }
@@ -839,6 +853,60 @@ function openAccountForm(onDone, account = null) {
 }
 
 /* ----------------------------------------------------------------- caché */
+/* ---------------------------------------------------------------- daemon */
+async function viewDaemon(el) {
+  const status = await api("/daemon/status").catch((error) => ({ reachable: false, error: error.message }));
+  const totals = status.totals || {};
+  el.innerHTML = `
+    <div class="grid kpi">
+      <div class="card"><h3>Estado</h3>
+        <div class="value">${status.reachable ? "En línea" : "Sin conexión"}</div>
+        <div class="hint">${status.reachable
+          ? `versión ${esc(status.version)} · rev ${esc(status.revision)}`
+          : esc(status.error || "")}</div></div>
+      <div class="card"><h3>Tiempo en marcha</h3>
+        <div class="value">${status.reachable ? esc(status.uptime || "—") : "—"}</div>
+        <div class="hint">motor de caché: ${esc(status.cache_engine || "—")}</div></div>
+      <div class="card"><h3>Usuarios</h3>
+        <div class="value">${fmtNumber(totals.connected)} <span class="hint">de ${fmtNumber(totals.users)}</span></div>
+        <div class="hint">conectados</div></div>
+      <div class="card"><h3>ECM</h3>
+        <div class="value">${fmtNumber(totals.ecm_ok)}</div>
+        <div class="hint">ok · nok ${fmtNumber(totals.ecm_nok)} · desde caché ${fmtNumber(totals.from_cache)}</div></div>
+    </div>
+    <div class="card">
+      <h3>Reiniciar el daemon</h3>
+      <p class="muted small">El proceso sale y systemd lo vuelve a levantar en unos segundos.
+        Durante ese hueco los clientes se desconectan. Use esto tras cambios manuales en
+        <code>ncam.conf</code>/<code>ncam.server</code>: lo que aplique desde Líneas o
+        Caché no necesita reinicio.</p>
+      <div class="actions">
+        <button class="btn danger" id="daemon-restart" ${status.reachable ? "" : "disabled"}>Reiniciar NCam</button>
+        <button class="btn ghost" id="daemon-reload">Refrescar estado</button>
+      </div>
+    </div>`;
+
+  $("#daemon-reload", el).onclick = () => renderView();
+  const restartBtn = $("#daemon-restart", el);
+  if (restartBtn && !restartBtn.disabled) {
+    restartBtn.onclick = async () => {
+      if (!await confirmDialog("Reiniciar NCam",
+        "El daemon se reiniciará y los clientes se desconectarán unos segundos. ¿Continuar?",
+        "Reiniciar")) return;
+      restartBtn.disabled = true;
+      try {
+        const result = await api("/daemon/restart", { method: "POST" });
+        toast(result.ok ? "Orden de reinicio enviada: el daemon vuelve en unos segundos"
+          : `No se pudo reiniciar: ${result.message}`, result.ok ? "ok" : "error");
+        setTimeout(() => renderView(), 6000);
+      } catch (error) {
+        toast(error.message, "error");
+        restartBtn.disabled = false;
+      }
+    };
+  }
+}
+
 async function viewCache(el) {
   const isSuper = state.user.role === "super_admin";
   const [cache, servers, limits] = await Promise.all([
@@ -861,7 +929,7 @@ async function viewCache(el) {
     </div>
 
     <div class="card">
-      <h3>Ajustes del motor <span class="hint">se exportan a ncam.conf</span></h3>
+      <h3>Ajustes del motor <span class="hint">se aplican en el daemon sin reiniciar</span></h3>
       <div class="grid three">
         <label>max_time (segundos)<input id="limit-max-time" type="number" min="3" max="600" value="${limits.max_time}"></label>
         <label>max_entries (0 = ilimitado)<input id="limit-max-entries" type="number" min="0" max="10000000" value="${limits.max_entries}"></label>
@@ -872,6 +940,7 @@ async function viewCache(el) {
       </div>
       ${isSuper ? `<div class="actions" style="margin-top:12px">
         <button class="btn primary" id="limits-save">Guardar ajustes</button>
+        <button class="btn blue" id="limits-apply">Guardar y aplicar en el daemon</button>
         <button class="btn ghost" id="limits-export">Generar bloques de configuración</button>
         <a class="btn ghost" href="${API}/cache/config/download?file=ncam.conf" onclick="return ncamDownload(event)">Descargar ncam.conf</a>
       </div>` : `<p class="hint">Solo el super administrador puede cambiar estos ajustes.</p>`}
@@ -893,7 +962,7 @@ async function viewCache(el) {
       <h3>Peers de caché <button class="btn small primary" id="peer-new">+ Nuevo peer</button></h3>
       <div class="table-wrap" style="margin-top:12px">
         <table><thead><tr><th>Nombre</th><th>Dirección</th><th>Protocolo</th><th>Propietario</th>
-          <th>Prioridad</th><th>Último test</th><th>Estado</th><th></th></tr></thead>
+          <th>Prioridad</th><th>Último test</th><th>Estado</th><th>En daemon</th><th></th></tr></thead>
           <tbody>${servers.items.length ? servers.items.map((server) => `
             <tr>
               <td><strong>${esc(server.name)}</strong></td>
@@ -904,13 +973,17 @@ async function viewCache(el) {
               <td class="nowrap">${server.last_check_at ? `${fmtDate(server.last_check_at, true)}<div class="hint">${
                 server.last_check_ok ? `${server.last_check_ms} ms` : esc(server.last_check_error || "falló")}</div>` : "—"}</td>
               <td>${server.enabled ? '<span class="badge ok">habilitado</span>' : '<span class="badge">deshabilitado</span>'}</td>
+              <td class="nowrap">${server.last_apply_at
+                ? `${server.last_apply_ok ? '<span class="badge ok">aplicado</span>' : '<span class="badge bad">falló</span>'}<div class="hint" title="${esc(server.last_apply_msg || "")}">${fmtDate(server.last_apply_at, true)}</div>`
+                : '<span class="hint">nunca</span>'}</td>
               <td class="actions">
                 <button class="btn small blue" data-peer="test" data-id="${server.id}">Probar</button>
+                ${isSuper ? `<button class="btn small blue" data-peer="apply" data-id="${server.id}" title="Crea o actualiza el reader en el daemon NCam">Aplicar</button>` : ""}
                 <button class="btn small ghost" data-peer="config" data-id="${server.id}">Config</button>
                 <button class="btn small ghost" data-peer="edit" data-id="${server.id}">Editar</button>
                 <button class="btn small danger" data-peer="del" data-id="${server.id}">Borrar</button>
               </td>
-            </tr>`).join("") : `<tr><td colspan="8" class="empty">Todavía no hay peers de caché configurados.</td></tr>`}
+            </tr>`).join("") : `<tr><td colspan="9" class="empty">Todavía no hay peers de caché configurados.</td></tr>`}
           </tbody></table>
       </div>
     </div>`;
@@ -945,10 +1018,29 @@ async function viewCache(el) {
         toast("Ajustes guardados");
       } catch (error) { toast(error.message, "error"); }
     };
+    $("#limits-apply", el).onclick = async () => {
+      const button = $("#limits-apply", el);
+      button.disabled = true;
+      try {
+        await api("/settings", {
+          method: "PATCH",
+          body: { values: {
+            "ncam.cache.max_time": $("#limit-max-time", el).value,
+            "ncam.cache.max_entries": $("#limit-max-entries", el).value,
+            "ncam.cache.cacheex_enable": $("#limit-cacheex", el).value,
+          } },
+        });
+        const result = await api("/cache/settings/apply", { method: "POST" });
+        toast(result.ok ? "Ajustes guardados y aplicados en el daemon"
+          : `Guardados, pero el daemon no los aceptó: ${result.message}`, result.ok ? "ok" : "error");
+      } catch (error) { toast(error.message, "error"); }
+      finally { button.disabled = false; }
+    };
     $("#limits-export", el).onclick = async () => {
       const data = await api("/cache/config");
       modal("Configuración para NCam", `
-        <p class="muted small">Copie cada bloque en el archivo correspondiente del daemon y recargue NCam.</p>
+        <p class="muted small">Copie cada bloque en el archivo correspondiente… o pulse
+          «Guardar y aplicar en el daemon» para enviarlo sin reiniciar.</p>
         ${Object.entries(data.blocks).map(([file, content]) => `
           <h3 style="margin-top:10px">${esc(file)} ${copyButton(content)}</h3>
           <pre class="code">${esc(content || "# (vacío)")}</pre>`).join("")}
@@ -971,6 +1063,17 @@ async function viewCache(el) {
         const result = await api(`/cache/servers/${id}/test`, { method: "POST" });
         toast(result.ok ? `Respuesta en ${result.latency_ms} ms` : `Sin respuesta: ${result.error}`, result.ok ? "ok" : "error");
         renderView();
+      } else if (button.dataset.peer === "apply") {
+        button.disabled = true;
+        try {
+          const result = await api(`/cache/servers/${id}/apply`, { method: "POST" });
+          toast(result.ok
+            ? `Reader ${result.created ? "creado" : "actualizado"} en el daemon (${result.label})`
+            : `El daemon no lo aceptó: ${result.message}`, result.ok ? "ok" : "error");
+          renderView();
+        } finally {
+          button.disabled = false;
+        }
       } else if (button.dataset.peer === "config") {
         const data = await api(`/cache/servers/${id}/config`);
         modal(`Config de ${server.name}`, `<pre class="code">${esc(data.block)}</pre>
@@ -1536,6 +1639,7 @@ const VIEWS = {
   usage: { title: "Consumo de ECM", subtitle: "Medición y facturación por bloques", render: viewUsage },
   audit: { title: "Auditoría", subtitle: "Registro de acciones sensibles", render: viewAudit },
   settings: { title: "Ajustes", subtitle: "Configuración global y mantenimiento", render: viewSettings },
+  daemon: { title: "Daemon NCam", subtitle: "Estado del proceso y reinicio", render: viewDaemon },
 };
 
 async function renderView() {

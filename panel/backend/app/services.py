@@ -723,6 +723,28 @@ def delete_cache_server(conn: sqlite3.Connection, ctx: AuthContext, server_id: i
     audit(conn, ctx, "cache_server.delete", "cache_server", server_id, {})
 
 
+def record_cache_server_apply(conn: sqlite3.Connection, server_id: int, ok: bool, message: str) -> None:
+    """Guarda el resultado de aplicar un peer en el daemon."""
+    now = database.utcnow()
+    database.execute(
+        conn,
+        "UPDATE cache_servers SET last_apply_at = ?, last_apply_ok = ?, last_apply_msg = ?,"
+        " updated_at = ? WHERE id = ?",
+        (now, 1 if ok else 0, message[:500], now, server_id),
+    )
+
+
+def record_line_apply(conn: sqlite3.Connection, line_id: int, ok: bool, message: str) -> None:
+    """Guarda el resultado de aplicar una línea en el daemon."""
+    now = database.utcnow()
+    database.execute(
+        conn,
+        "UPDATE lines SET last_apply_at = ?, last_apply_ok = ?, last_apply_msg = ?,"
+        " updated_at = ? WHERE id = ?",
+        (now, 1 if ok else 0, message[:500], now, line_id),
+    )
+
+
 # ---------------------------------------------------------------------------
 # métricas
 # ---------------------------------------------------------------------------

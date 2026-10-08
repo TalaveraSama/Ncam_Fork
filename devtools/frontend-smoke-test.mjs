@@ -232,14 +232,23 @@ const cacheServers = { items: [{
 }] };
 const cacheLimits = { max_time: 15, max_entries: 0, cacheex_enabled: true };
 let testPosts = 0;
+let restartPosts = 0;
+const daemonStatus = {
+  reachable: true, version: "NCam-NG 2.5", revision: "33", uptime: "00d 01:23:45",
+  totals: { connected: 1, users: 2, ecm_ok: 10, ecm_nok: 1, from_cache: 4 },
+  cache_engine: "NCam-NG cache engine", error: null,
+};
 window.fetch = async (url, options = {}) => {
   const path = String(url).replace(/^https?:\/\/[^/]+/, "").split("?")[0];
   if ((options.method || "GET") === "POST" && path === "/api/v1/cache/servers/1/test") testPosts += 1;
+  if ((options.method || "GET") === "POST" && path === "/api/v1/daemon/restart") restartPosts += 1;
   const bodies = {
     "/api/v1/cache/stats": cacheStats,
     "/api/v1/cache/servers": cacheServers,
     "/api/v1/cache/limits": cacheLimits,
     "/api/v1/cache/servers/1/test": { id: 1, host: "127.0.0.1", port: 12000, ok: true, latency_ms: 34, error: null },
+    "/api/v1/daemon/status": daemonStatus,
+    "/api/v1/daemon/restart": { ok: true, message: "Orden enviada" },
   };
   const body = bodies[path] ?? {};
   return {
@@ -255,9 +264,28 @@ await window.eval(`(async () => {
   await renderView();
 })()`);
 check("la vista de caché se dibuja", doc.querySelectorAll('#view button[data-peer="test"]').length === 1);
+check("el super admin ve el botón Aplicar en cada peer",
+  doc.querySelectorAll('#view button[data-peer="apply"]').length === 1);
+check("el super admin ve Guardar y aplicar en los ajustes del motor",
+  doc.querySelector("#view #limits-apply") !== null);
 doc.querySelector('#view button[data-peer="test"]').click();
 await new Promise((resolve) => setTimeout(resolve, 300));
 check("un clic en Probar envía una sola petición aunque se pintó dos veces", testPosts === 1);
+
+// --- vista del daemon: estado + reinicio con confirmación --------------------
+await window.eval(`(async () => {
+  state.view = "daemon";
+  await renderView();
+})()`);
+check("la vista del daemon muestra el estado",
+  doc.querySelector("#view").innerHTML.includes("En línea")
+  && doc.querySelector("#view #daemon-restart") !== null);
+doc.querySelector("#view #daemon-restart").click();
+await new Promise((resolve) => setTimeout(resolve, 100));
+check("reiniciar pide confirmación", doc.querySelector("#modal-root [data-ok]") !== null);
+doc.querySelector("#modal-root [data-ok]").click();
+await new Promise((resolve) => setTimeout(resolve, 300));
+check("confirmar el reinicio envía una petición al daemon", restartPosts === 1);
 
 console.log(failures.length ? `\n${failures.length} fallo(s)` : "\nfrontend OK");
 process.exit(failures.length ? 1 : 0);

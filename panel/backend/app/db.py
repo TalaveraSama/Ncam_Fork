@@ -17,7 +17,7 @@ from typing import Any, Iterable, Iterator, Optional
 from .config import settings
 
 
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 6
 
 SCHEMA = """
 PRAGMA journal_mode = WAL;
@@ -73,6 +73,9 @@ CREATE TABLE IF NOT EXISTS lines (
     notify_days       INTEGER NOT NULL DEFAULT 0,        -- días de antelación propios (0 = usar el global)
     ecm_total         INTEGER NOT NULL DEFAULT 0,        -- último contador de ECM leído del daemon
     ecm_billed        INTEGER NOT NULL DEFAULT 0,        -- ECM ya facturadas al propietario
+    last_apply_at     TEXT,                              -- última vez que se aplicó al daemon
+    last_apply_ok     INTEGER,                           -- 1 = el daemon lo aceptó
+    last_apply_msg    TEXT,                              -- mensaje del daemon (o del error)
     notes             TEXT,
     created_at        TEXT    NOT NULL,
     updated_at        TEXT    NOT NULL,
@@ -100,6 +103,9 @@ CREATE TABLE IF NOT EXISTS cache_servers (
     last_check_ok   INTEGER,
     last_check_ms   INTEGER,
     last_check_error TEXT,
+    last_apply_at   TEXT,                                -- última vez que se aplicó al daemon
+    last_apply_ok   INTEGER,                             -- 1 = el daemon lo aceptó
+    last_apply_msg  TEXT,                                -- mensaje del daemon (o del error)
     created_at      TEXT    NOT NULL,
     updated_at      TEXT    NOT NULL
 );
@@ -333,6 +339,15 @@ def _migrate(conn: sqlite3.Connection, from_version: int) -> None:
         # de las líneas ya creadas no cambia
         if "cccmaxhops" not in line_columns:
             conn.execute("ALTER TABLE lines ADD COLUMN cccmaxhops INTEGER NOT NULL DEFAULT 1")
+    if from_version < 6:
+        # control del daemon: cuándo se aplicó cada línea/peer y qué dijo NCam
+        server_columns = {row["name"] for row in conn.execute("PRAGMA table_info(cache_servers)")}
+        for column in ("last_apply_at", "last_apply_ok", "last_apply_msg"):
+            ddl_type = "INTEGER" if column == "last_apply_ok" else "TEXT"
+            if column not in line_columns:
+                conn.execute(f"ALTER TABLE lines ADD COLUMN {column} {ddl_type}")
+            if column not in server_columns:
+                conn.execute(f"ALTER TABLE cache_servers ADD COLUMN {column} {ddl_type}")
 
 
 DEFAULT_SETTINGS = {

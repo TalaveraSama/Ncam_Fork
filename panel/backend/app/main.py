@@ -26,7 +26,7 @@ from . import billing
 from . import notifications
 from .services import record_snapshot
 from .config import FRONTEND_DIR, settings
-from .routers import accounts, admin, auth, billing as billing_router, cache, lines, notifications as notifications_router, stats
+from .routers import accounts, admin, auth, billing as billing_router, cache, daemon, lines, notifications as notifications_router, stats
 
 
 log = logging.getLogger("ncam.panel")
@@ -229,6 +229,7 @@ app.include_router(auth.router, prefix=API_PREFIX)
 app.include_router(accounts.router, prefix=API_PREFIX)
 app.include_router(lines.router, prefix=API_PREFIX)
 app.include_router(cache.router, prefix=API_PREFIX)
+app.include_router(daemon.router, prefix=API_PREFIX)
 app.include_router(stats.router, prefix=API_PREFIX)
 app.include_router(admin.router, prefix=API_PREFIX)
 app.include_router(notifications_router.router, prefix=API_PREFIX)

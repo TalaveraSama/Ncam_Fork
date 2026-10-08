@@ -102,6 +102,9 @@ Todo esto, con ejemplos y preguntas frecuentes, en
 * **Emite créditos** (recargas) y ajusta saldos; ve el libro mayor completo.
 * Define ajustes globales, del panel y del **motor de caché** (`max_time`,
   `max_entries`, cacheex) y exporta la configuración para el daemon.
+* **Controla el daemon**: aplica líneas (cuentas), peers (readers) y ajustes
+  `[cache]` en caliente, sin reiniciar, y puede reiniciar NCam desde la vista
+  *Daemon NCam*. Todo queda en la auditoría.
 * Ve la auditoría completa y puede purgar el histórico de métricas.
 
 ### Reseller
@@ -177,6 +180,7 @@ POST   /lines/{id}/renew                  +N días (descuenta créditos)
 POST   /lines/{id}/reset-password
 GET    /lines/{id}/password               consulta explícita (auditada)
 GET    /lines/{id}/export?format=         ncam | cccam | newcamd | camd35 | json
+POST   /lines/{id}/apply                  crear/actualizar la cuenta en el daemon (solo super admin)
 ```
 
 Avisos de caducidad (`/api/v1/notifications`)
@@ -201,6 +205,15 @@ GET    /cache/config/download?file=
 GET    /cache/servers                     CRUD de peers cacheex
 POST   /cache/servers/{id}/test           prueba TCP real (latencia/error)
 GET    /cache/servers/{id}/config         bloque [reader] para ncam.server
+POST   /cache/servers/{id}/apply          crear/actualizar el reader en el daemon (solo super admin)
+POST   /cache/settings/apply              aplicar [cache] en el daemon (solo super admin)
+```
+
+Daemon (`/api/v1/daemon`)
+
+```
+GET    /daemon/status                     alcance, versión y tiempo en marcha
+POST   /daemon/restart                    reiniciar NCam (solo super admin)
 ```
 
 Estadísticas, administración y metadatos
@@ -340,9 +353,17 @@ max_entries = 0
    entradas más servidas y el histórico de aciertos (una muestra cada 60 s).
 4. El botón **Generar bloques de configuración** produce `ncam.conf`,
    `ncam.user` y `ncam.server` listos para copiar o descargar.
+5. El super admin no necesita copiar nada: **Aplicar** en una línea o un peer
+   la crea/actualiza en el daemon en caliente (y queda guardada en
+   `ncam.user`/`ncam.server`); **Guardar y aplicar** envía la sección `[cache]`;
+   la vista **Daemon NCam** permite reiniciar el proceso. Cada peer y línea
+   recuerda su última aplicación (fecha y resultado).
 
 Si el daemon no está accesible, el panel **no falla**: muestra el error y
-ofrece el último histórico guardado.
+ofrece el último histórico guardado. Las acciones de control devuelven
+`{ok: false, message}` (sin 500) con el motivo: credenciales del WebIf
+(`httppwd` distinto de `panel.ncam_webif_password`), modo `httpreadonly`,
+o que el daemon no pudo escribir su configuración.
 
 > **`HTTP 403 Access denied`** en *Caché y peers* significa que el daemon no permite
 > la dirección desde la que se conecta el panel: `httpallowed` son las IPs de **quien
@@ -354,8 +375,9 @@ ofrece el último histórico guardado.
 
 ```bash
 cd panel/backend
-python3 -m pytest          # 64 pruebas: auth, RBAC, líneas, créditos, caché,
-                           # ajustes, auditoría, API keys y suspensión de cuentas
+python3 -m pytest          # 109 pruebas: auth, RBAC, líneas, créditos, caché,
+                           # ajustes, auditoría, API keys, suspensión de cuentas
+                           # y control del daemon contra el simulador
 ```
 
 ## 6. Desarrollo del frontend sin daemon
@@ -365,7 +387,11 @@ python3 panel/tools/mock_ncam_webif.py --port 8181   # simulador del WebIf de NC
 ```
 
 Sirve el mismo contrato JSON (`part=cachestats` y `part=status`) con valores
-dinámicos, para trabajar en la interfaz sin compilar NCam.
+dinámicos, para trabajar en la interfaz sin compilar NCam. También simula las
+acciones de control (guardar usuarios/readers, ejecutar `[cache]`, reiniciar)
+respetando los marcadores del daemon real, así que los botones **Aplicar** y
+**Reiniciar** funcionan contra él; las pruebas de `test_daemon_control.py` lo
+levantan solas en un puerto efímero.
 
 ## 7. Seguridad
 
