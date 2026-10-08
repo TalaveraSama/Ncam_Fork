@@ -52,7 +52,7 @@ jobs:
           if [ ${{ github.event_name }} == 'workflow_dispatch' ]; then
             make ${{ github.event.inputs.use }}
           else
-            make USE_LIBCURL=1 USE_LIBUSB=1 EXTRA_CFLAGS="-DOPENSSL_API_COMPAT=0x10101000L -DWITH_SENDCMD"
+            make USE_LIBCURL=1 USE_LIBUSB=1 EXTRA_CFLAGS="-DOPENSSL_API_COMPAT=0x10101000L -DWITH_SENDCMD" > /tmp/make.log 2>&1 || (tail -n 60 /tmp/make.log | sed -e 's/%/%25/g' -e 's/^/::error::/'; exit 1)
           fi
       - name: Test
         run: |
