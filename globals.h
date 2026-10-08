@@ -405,6 +405,8 @@ typedef uint8_t uint8_t;
 #define CS_QLEN       128 // size of request queue
 #define CS_MAXPROV    128
 #define CS_MAXPORTS   200  // max server ports
+// max caid filters (caid:ident pairs) on a single newcamd port
+#define CS_MAX_NCD_FILTS 16
 #define CS_CLIENT_HASHBUCKETS 32
 #define CS_SERVICENAME_SIZE 48
 
@@ -814,7 +816,7 @@ typedef struct s_ftab
 typedef struct s_ncd_ftab
 {
 	int32_t         nfilts;
-	FILTER          filts[16];
+	FILTER          filts[CS_MAX_NCD_FILTS];
 } NCD_FTAB;
 
 struct ncd_port

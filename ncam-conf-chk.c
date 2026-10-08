@@ -451,6 +451,12 @@ void chk_port_tab(char *portasc, PTAB *ptab)
 			if((ptr2 = strchr(trim(ptr3), ':')))
 			{
 				*ptr2++ = '\0';
+				if(newptab->ports[iport].ncd->ncd_ftab.nfilts >= CS_MAX_NCD_FILTS)
+				{
+					fprintf(stderr, "newcamd: too many CAIDs for port %d, '%s' and the rest ignored (max %d)\n",
+							newptab->ports[iport].s_port, ptr3, CS_MAX_NCD_FILTS);
+					break;
+				}
 				ifilt = newptab->ports[iport].ncd->ncd_ftab.nfilts++;
 				j = 0;
 				newptab->ports[iport].ncd->ncd_ftab.filts[ifilt].caid = (uint16_t)a2i(ptr3, 4);

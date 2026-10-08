@@ -170,11 +170,18 @@ autosidblock   = 1
 
 ```ini
 [newcamd]
-# un solo puerto da los tres CAID
-port     = 50000@1801,1861,0B00
+# un solo puerto da los tres CAID: parejas caid:provid separadas por comas
+# (hasta 16 por puerto; se anuncia el primero de la lista)
+port     = 50000@1801:000000,1861:000000,0B00:000000
 key      = 0102030405060708091011121314
 mgclient = 1
 ```
+
+> Cada CAID necesita su `:provid`: sin los dos puntos (`50000@1801,1861,0B00`)
+> NO son tres CAID — el puerto quedaría con CAID 0 y tres provids sueltos.
+> Los clientes mgcamd piden cualquiera de los CAID listados; los de estilo
+> oscam (que entran con CAID 0) se mapean al CAID adivinado del ECM si está
+> en la lista, y se rechazan si no.
 
 Un usuario de CCcam recibiría esto (equivalente a una `C:`):
 

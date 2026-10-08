@@ -2868,6 +2868,51 @@ static void guess_cardsystem(ECM_REQUEST *er)
 		{ er->caid = last_hope; }
 }
 
+#ifdef MODULE_NEWCAMD
+static bool ncd_port_has_caid(NCD_FTAB *nftab, uint16_t caid)
+{
+	int32_t f;
+	for(f = 0; f < nftab->nfilts; f++)
+	{
+		if(nftab->filts[f].caid == caid)
+		{
+			return true;
+		}
+	}
+	return false;
+}
+
+// Best port filter for an ECM whose exact CAID is unknown (oscam-style
+// clients send caid 0, so it was guessed from the ECM bytes above): same
+// card family as the guess, preferring a provid match.
+static int32_t ncd_port_best_filt(NCD_FTAB *nftab, uint16_t caid, uint32_t prid)
+{
+	int32_t f, i, first_family = -1;
+	for(f = 0; f < nftab->nfilts; f++)
+	{
+		if((nftab->filts[f].caid >> 8) != (caid >> 8))
+		{
+			continue;
+		}
+		if(first_family < 0)
+		{
+			first_family = f;
+		}
+		if(prid)
+		{
+			for(i = 0; i < nftab->filts[f].nprids; i++)
+			{
+				if(nftab->filts[f].prids[i] == prid)
+				{
+					return f;
+				}
+			}
+		}
+	}
+	return first_family;
+}
+#endif
+
 // chid calculation from module stat to here
 // to improve the quickfix concerning ecm chid info and extend it
 // to all client requests wereby the chid is known in module stat
@@ -3216,6 +3261,30 @@ void get_cw(struct s_client *client, ECM_REQUEST *er)
 	if(((er->caid & 0xFF00) == 0x1800) && er->prid > 0x00FFFF)
 		{ er->prid = 0; }
 
+#ifdef MODULE_NEWCAMD
+	// Multi-CAID ports: oscam-style clients send caid 0, so the caid was
+	// guessed from the ECM bytes above; map it onto a CAID this port actually
+	// serves, before the provider is extracted with it below.
+	if(client->ncd_server)
+	{
+		int32_t pi = client->port_idx;
+		if(pi >= 0 && cfg.ncd_ptab.nports && cfg.ncd_ptab.nports >= pi && cfg.ncd_ptab.ports[pi].ncd)
+		{
+			NCD_FTAB *nftab = &cfg.ncd_ptab.ports[pi].ncd->ncd_ftab;
+			if(nftab->nfilts > 1 && !ncd_port_has_caid(nftab, er->caid))
+			{
+				int32_t f = ncd_port_best_filt(nftab, er->caid, er->prid);
+				if(f >= 0)
+				{
+					cs_log_dbg(D_CLIENT, "newcamd: mapped guessed caid %04X to port caid %04X",
+								er->caid, nftab->filts[f].caid);
+					er->caid = nftab->filts[f].caid;
+				}
+			}
+		}
+	}
+#endif
+
 	// Check for invalid provider, extract provider out of ecm:
 	uint32_t prid = chk_provid(er->ecm, er->caid);
 	if(!er->prid)
@@ -3232,12 +3301,27 @@ void get_cw(struct s_client *client, ECM_REQUEST *er)
 	}
 
 #ifdef MODULE_NEWCAMD
-	// Set providerid for newcamd clients if none is given
-	if(!er->prid && client->ncd_server)
+	if(client->ncd_server)
 	{
 		int32_t pi = client->port_idx;
 		if(pi >= 0 && cfg.ncd_ptab.nports && cfg.ncd_ptab.nports >= pi && cfg.ncd_ptab.ports[pi].ncd)
-			{ er->prid = cfg.ncd_ptab.ports[pi].ncd->ncd_ftab.filts[0].prids[0]; }
+		{
+			NCD_FTAB *nftab = &cfg.ncd_ptab.ports[pi].ncd->ncd_ftab;
+			// Set providerid for newcamd clients if none is given
+			if(!er->prid)
+			{
+				int32_t f;
+				er->prid = nftab->filts[0].prids[0];
+				for(f = 0; f < nftab->nfilts; f++)
+				{
+					if(nftab->filts[f].caid == er->caid && nftab->filts[f].nprids)
+					{
+						er->prid = nftab->filts[f].prids[0];
+						break;
+					}
+				}
+			}
+		}
 	}
 #endif
 

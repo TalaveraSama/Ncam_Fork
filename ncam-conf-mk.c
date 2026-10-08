@@ -453,7 +453,7 @@ char *mk_t_aeskeys(struct s_reader *rdr)
 char *mk_t_newcamd_port(void)
 {
 #ifdef MODULE_NEWCAMD
-	int32_t i, j, k, pos = 0, needed = 1;
+	int32_t i, j, k, f, pos = 0, needed = 1;
 
 	/* Precheck to determine how long the resulting string will maximally be (might be a little bit smaller but that shouldn't hurt) */
 	for(i = 0; i < cfg.ncd_ptab.nports; ++i)
@@ -464,9 +464,12 @@ char *mk_t_newcamd_port(void)
 		{
 			if(cfg.ncd_ptab.ports[i].ncd->ncd_key_is_set) { needed += 30; }
 
-			if(cfg.ncd_ptab.ports[i].ncd->ncd_ftab.filts[0].nprids > 0)
+			NCD_FTAB *nftab = &cfg.ncd_ptab.ports[i].ncd->ncd_ftab;
+			int32_t nf = nftab->nfilts ? nftab->nfilts : 1;
+			for(f = 0; f < nf; f++)
 			{
-				needed += cfg.ncd_ptab.ports[i].ncd->ncd_ftab.filts[0].nprids * 7;
+				needed += 5; /* ,CAID */
+				needed += nftab->filts[f].nprids * 7;
 			}
 		}
 	}
@@ -491,15 +494,16 @@ char *mk_t_newcamd_port(void)
 				pos += snprintf(value + pos, needed - pos, "}");
 			}
 
-			pos += snprintf(value + pos, needed - pos, "@%04X", cfg.ncd_ptab.ports[i].ncd->ncd_ftab.filts[0].caid);
-
-			if(cfg.ncd_ptab.ports[i].ncd->ncd_ftab.filts[0].nprids > 0)
+			NCD_FTAB *nftab = &cfg.ncd_ptab.ports[i].ncd->ncd_ftab;
+			int32_t nf = nftab->nfilts ? nftab->nfilts : 1; // plain ports still serialize filts[0]
+			dot2 = "@";
+			for(f = 0; f < nf; f++)
 			{
-				dot2 = ":";
-				for(j = 0; j < cfg.ncd_ptab.ports[i].ncd->ncd_ftab.filts[0].nprids; ++j)
+				pos += snprintf(value + pos, needed - pos, "%s%04X", dot2, nftab->filts[f].caid);
+				dot2 = ",";
+				for(j = 0; j < nftab->filts[f].nprids; ++j)
 				{
-					pos += snprintf(value + pos, needed - pos, "%s%06X", dot2, (int)cfg.ncd_ptab.ports[i].ncd->ncd_ftab.filts[0].prids[j]);
-					dot2 = ",";
+					pos += snprintf(value + pos, needed - pos, "%s%06X", j == 0 ? ":" : ",", (int)nftab->filts[f].prids[j]);
 				}
 			}
 		}

@@ -772,20 +772,15 @@ static void mk_user_au_ftab(struct s_reader *aureader, FILTER *filt)
 	}
 }
 
-static void mk_user_ftab(FILTER *filt)
+// Build one user filter from one newcamd port filter, honouring the account's
+// caid/ident limits. Returns false when the account does not allow this CAID
+// (filt is left zeroed then, like the old failure path did).
+static bool mk_user_ftab_for(FILTER *filt, FILTER *psfilt, bool log_fail)
 {
-	int32_t port_idx, i, j, k, c;
+	int32_t i, j, k, c;
 	struct s_client *cl = cur_client();
 
 	memset(filt, 0, sizeof(*filt));
-
-	port_idx = cl->port_idx;
-	if(!cfg.ncd_ptab.ports[port_idx].ncd)
-	{
-		return;
-	}
-
-	FILTER *psfilt = &cfg.ncd_ptab.ports[port_idx].ncd->ncd_ftab.filts[0];
 
 	// 1. CAID
 	// search server CAID in client CAID
@@ -808,8 +803,11 @@ static void mk_user_ftab(FILTER *filt)
 
 	if(c && !filt->caid)
 	{
-		cs_log("no valid CAID found in CAID for user '%s'", cl->account->usr);
-		return;
+		if(log_fail)
+		{
+			cs_log("no valid CAID found in CAID for user '%s'", cl->account->usr);
+		}
+		return false;
 	}
 
 	// search CAID in client IDENT
@@ -836,9 +834,11 @@ static void mk_user_ftab(FILTER *filt)
 
 		if(fcaids == cl->ftab.nfilts && !filt->caid)
 		{
-			cs_log("no valid CAID found in IDENT for user '%s'", cl->account->usr);
-			//cs_disconnect_client();
-			return;
+			if(log_fail)
+			{
+				cs_log("no valid CAID found in IDENT for user '%s'", cl->account->usr);
+			}
+			return false;
 		}
 	}
 
@@ -904,7 +904,7 @@ static void mk_user_ftab(FILTER *filt)
 		}
 
 		memcpy(filt, psfilt, sizeof(*filt));
-		return;
+		return true;
 	}
 
 	// search in client IDENT
@@ -941,9 +941,66 @@ static void mk_user_ftab(FILTER *filt)
 
 	if(!filt->nprids)
 	{
-		cs_log("no valid PROVID(s) found in CAID for user '%s'", cl->account->usr);
-		//cs_disconnect_client();
+		if(log_fail)
+		{
+			cs_log("no valid PROVID(s) found in CAID for user '%s'", cl->account->usr);
+		}
 	}
+	return true;
+}
+
+// Announced user filter: first port filter the account allows, so one port
+// can serve several CAIDs. Returns the matched port filter index (-1 if none,
+// filt stays zeroed then, like the old failure path). Single-CAID ports
+// behave exactly like before.
+static int32_t mk_user_ftab(FILTER *filt)
+{
+	int32_t port_idx, f, nfilts;
+	struct s_client *cl = cur_client();
+
+	memset(filt, 0, sizeof(*filt));
+
+	port_idx = cl->port_idx;
+	if(!cfg.ncd_ptab.ports[port_idx].ncd)
+	{
+		return -1;
+	}
+
+	NCD_FTAB *nftab = &cfg.ncd_ptab.ports[port_idx].ncd->ncd_ftab;
+	nfilts = nftab->nfilts ? nftab->nfilts : 1; // plain ports still use filts[0]
+	for(f = 0; f < nfilts; f++)
+	{
+		if(mk_user_ftab_for(filt, &nftab->filts[f], f == 0))
+		{
+			return f;
+		}
+	}
+	return -1;
+}
+
+// Build the remaining allowed port filters. Must run before cl->ftab is
+// replaced (it reads the account ident). Returns how many filters were
+// stored in extras[].
+static int32_t mk_user_ftab_extra(FILTER *extras, int32_t skip)
+{
+	int32_t port_idx, f, n = 0;
+	struct s_client *cl = cur_client();
+
+	port_idx = cl->port_idx;
+	if(!cfg.ncd_ptab.ports[port_idx].ncd)
+	{
+		return 0;
+	}
+
+	NCD_FTAB *nftab = &cfg.ncd_ptab.ports[port_idx].ncd->ncd_ftab;
+	for(f = 0; f < nftab->nfilts; f++)
+	{
+		if(f != skip && n < CS_MAX_NCD_FILTS && mk_user_ftab_for(&extras[n], &nftab->filts[f], false))
+		{
+			n++;
+		}
+	}
+	return n;
 }
 
 static int8_t newcamd_auth_client(IN_ADDR_T ip, uint8_t *deskey)
@@ -1092,27 +1149,31 @@ static int8_t newcamd_auth_client(IN_ADDR_T ip, uint8_t *deskey)
 		LL_ITER itr = ll_iter_create(cl->aureader_list);
 		while((rdr = ll_iter_next(&itr)))
 		{
-			int32_t n;
+			int32_t f, n;
 
 			if(!cfg.ncd_ptab.ports[cl->port_idx].ncd)
 			{
 				continue;
 			}
 
-			if(cfg.ncd_ptab.ports[cl->port_idx].ncd->ncd_ftab.filts[0].caid == 0
-				&& !rdr->audisabled && (is_network_reader(rdr) || rdr->card_status == CARD_INSERTED))
+			NCD_FTAB *nftab = &cfg.ncd_ptab.ports[cl->port_idx].ncd->ncd_ftab;
+			int32_t nfilts = nftab->nfilts ? nftab->nfilts : 1; // plain ports still use filts[0]
+			for(f = 0; f < nfilts && !aureader; f++)
 			{
-				aureader = rdr;
-				break;
-			}
-
-			for(n = 0; n < cfg.ncd_ptab.ports[cl->port_idx].ncd->ncd_ftab.filts[0].nprids; n++)
-			{
-				if(emm_reader_match(rdr, cfg.ncd_ptab.ports[cl->port_idx].ncd->ncd_ftab.filts[0].caid,
-									cfg.ncd_ptab.ports[cl->port_idx].ncd->ncd_ftab.filts[0].prids[n]))
+				if(nftab->filts[f].caid == 0
+					&& !rdr->audisabled && (is_network_reader(rdr) || rdr->card_status == CARD_INSERTED))
 				{
 					aureader = rdr;
 					break;
+				}
+
+				for(n = 0; n < nftab->filts[f].nprids; n++)
+				{
+					if(emm_reader_match(rdr, nftab->filts[f].caid, nftab->filts[f].prids[n]))
+					{
+						aureader = rdr;
+						break;
+					}
 				}
 			}
 
@@ -1156,7 +1217,16 @@ static int8_t newcamd_auth_client(IN_ADDR_T ip, uint8_t *deskey)
 				return -1;
 			}
 
-			mk_user_ftab(&usr_filter);
+			int32_t announced_filt = mk_user_ftab(&usr_filter);
+
+			// extra allowed CAIDs of this port (built now: cl->ftab still
+			// holds the account ident, which the builder reads)
+			FILTER extra_filts[CS_MAX_NCD_FILTS];
+			int32_t nextra = 0;
+			if(!cfg.ncd_mgclient)
+			{
+				nextra = mk_user_ftab_extra(extra_filts, announced_filt);
+			}
 
 			// set userfilter for au enabled clients
 			if(aureader)
@@ -1164,7 +1234,9 @@ static int8_t newcamd_auth_client(IN_ADDR_T ip, uint8_t *deskey)
 #ifdef WITH_EMU
 				if(aureader->typ == R_EMU)
 				{
-					usr_filter = *get_emu_prids_for_caid(aureader, cfg.ncd_ptab.ports[cl->port_idx].ncd->ncd_ftab.filts[0].caid);
+					uint16_t au_caid = usr_filter.caid ? usr_filter.caid :
+						cfg.ncd_ptab.ports[cl->port_idx].ncd->ncd_ftab.filts[0].caid;
+					usr_filter = *get_emu_prids_for_caid(aureader, au_caid);
 				}
 				else
 #endif
@@ -1175,7 +1247,12 @@ static int8_t newcamd_auth_client(IN_ADDR_T ip, uint8_t *deskey)
 
 			if(!cfg.ncd_mgclient)
 			{
+				int32_t e;
 				ftab_add(&cl->ftab, &usr_filter);
+				for(e = 0; e < nextra; e++)
+				{
+					ftab_add(&cl->ftab, &extra_filts[e]);
+				}
 			}
 
 			mbuf[0] = MSG_CARD_DATA;
@@ -1400,10 +1477,12 @@ static void newcamd_process_ecm(struct s_client *cl, uint8_t *buf, int32_t len)
 	if(!er->caid)
 	{
 		pi = cl->port_idx;
-		if(cfg.ncd_ptab.nports && cfg.ncd_ptab.nports >= pi && cfg.ncd_ptab.ports[pi].ncd)
+		if(cfg.ncd_ptab.nports && cfg.ncd_ptab.nports >= pi && cfg.ncd_ptab.ports[pi].ncd
+			&& cfg.ncd_ptab.ports[pi].ncd->ncd_ftab.nfilts <= 1)
 		{
 			er->caid = cfg.ncd_ptab.ports[pi].ncd->ncd_ftab.filts[0].caid;
 		}
+		// multi-CAID ports: leave it zero so get_cw() guesses it from the ECM
 	}
 
 	memcpy(er->ecm, buf + 2, er->ecmlen);

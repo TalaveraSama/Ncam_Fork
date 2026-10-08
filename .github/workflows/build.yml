@@ -62,3 +62,6 @@ jobs:
           echo
           echo -e "\033[1mNCam binary configuration and version:\033[m"
           ${{github.workspace}}/Distribution/ncam*debug -V
+      - name: Test newcamd multi-CAID
+        run: |
+          sh ${{github.workspace}}/devtools/test-newcamd-multicaid.sh

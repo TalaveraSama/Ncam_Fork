@@ -1,5 +1,29 @@
 # Changelog
 
+## [2.6.0] - 2026-10-08 — un puerto newcamd sirve varios CAID
+
+* **Nuevo: filtros multi-CAID por puerto newcamd.**
+  `port = 12000@1802:000000,1861:000000,0B00:000000` sirve los tres CAID en
+  un solo puerto (hasta 16 filtros por puerto; el exceso se ignora con un
+  aviso en el log). Cada CAID necesita su `:provid` explícito; los clientes
+  mgcamd piden cualquiera de los listados y los no listados se rechazan
+  igual que antes. Se anuncia el primer CAID de la lista.
+* **Nuevo: mapeo de clientes estilo oscam (CAID 0).** Si el ECM trae CAID 0,
+  el daemon adivina el CAID por el patrón del ECM y lo mapea al CAID del
+  puerto antes de extraer el provider; si el CAID adivinado no está en el
+  puerto, el ECM se rechaza con `no card support`. Sin cambios en puertos
+  de un solo CAID ni en puertos planos (verificado byte a byte).
+* El WebIf muestra y guarda el puerto múltiple completo (antes perdía los
+  CAID extra al guardar), y `caid =` en la cuenta anuncia solo el primer
+  CAID permitido del puerto.
+* Corregida la documentación: `examples/ncam.conf` y
+  `docs/configuracion-optima.md` usaban `@1801,1861,0B00`, que NO son tres
+  CAID (queda CAID 0 con tres provids); ahora muestran la sintaxis explícita
+  `caid:provid`.
+* Pruebas: nuevo `devtools/test-newcamd-multicaid.sh` (23 comprobaciones:
+  multi-CAID, CAID 0, puerto único, cuenta limitada, WebIf y límite de 16)
+  con cliente de pruebas `devtools/ncd_test_client.c`, enganchado al CI.
+
 ## [2.5.0] - 2026-10-08 — el panel ya controla el daemon
 
 * **Nuevo: aplicar líneas, peers y ajustes en caliente, sin reiniciar.**
