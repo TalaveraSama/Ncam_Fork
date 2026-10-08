@@ -31,7 +31,7 @@ check() {   # check <descripción> <resultado>
 
 echo "== sintaxis y ayuda de los scripts =="
 for script in devtools/install-deb.sh devtools/build-deb.sh devtools/install-daemon.sh \
-		devtools/install-panel.sh devtools/install-systemd.sh; do
+		devtools/install-panel.sh devtools/install-systemd.sh devtools/uninstall.sh; do
 	sh -n "$script" 2>/dev/null
 	check "$script: sintaxis válida" $?
 	sh "$script" --help >/dev/null 2>&1
@@ -41,7 +41,7 @@ done
 echo "== funciones que se llaman a sí mismas (recursión) =="
 # Un "| nombre |" o "nombre |" dentro de la propia definición de la función es
 # casi siempre un error de edición; se detecta comparando con el nombre.
-for script in devtools/install-deb.sh devtools/build-deb.sh; do
+for script in devtools/install-deb.sh devtools/build-deb.sh devtools/uninstall.sh; do
 	bad=0
 	for fn in $(sed -n 's/^\([a-z_][a-z_]*\)() *{.*/\1/p' "$script"); do
 		if awk -v f="$fn" '
@@ -371,6 +371,43 @@ check "el instalador documenta --list-assets" $?
 sh devtools/install-deb.sh --opcion-inventada >/dev/null 2>&1 && r=0 || r=$?
 [ "$r" = "2" ] && r=0 || r=1
 check "una opción desconocida termina con error" "$r"
+
+echo "== desinstalador =="
+sh devtools/uninstall.sh --help 2>/dev/null | grep -q -- '--purge'
+check "el desinstalador documenta --purge" $?
+sh devtools/uninstall.sh --help 2>/dev/null | grep -q -- '--dry-run'
+check "el desinstalador documenta --dry-run" $?
+sh devtools/uninstall.sh --opcion-inventada >/dev/null 2>&1 && r=0 || r=$?
+[ "$r" = "2" ] && r=0 || r=1
+check "el desinstalador rechaza opciones desconocidas con error" "$r"
+# --dry-run no necesita root y no toca nada: en este entorno no hay nada instalado
+out="$(sh devtools/uninstall.sh --dry-run 2>&1)"
+if printf '%s' "$out" | grep -q "No hay nada de NCam-NG instalado"; then r=0; else r=1; fi
+check "el desinstalador detecta que no hay nada instalado" "$r"
+# con una instalación simulada desde código, el plan la menciona y no toca nada
+fake_root="$(mktemp -d)"
+mkdir -p "$fake_root/usr/local/bin" "$fake_root/usr/local/etc" \
+	"$fake_root/etc/systemd/system" "$fake_root/var/lib/ncam-ng-panel"
+printf '#!/bin/sh\necho fake\n' > "$fake_root/usr/local/bin/ncam"
+chmod +x "$fake_root/usr/local/bin/ncam"
+touch "$fake_root/usr/local/etc/ncam.conf" "$fake_root/etc/systemd/system/ncam.service" \
+	"$fake_root/etc/systemd/system/ncam-panel.service" "$fake_root/var/lib/ncam-ng-panel/panel.db"
+out="$(NCAM_UNINSTALL_ROOT="$fake_root" sh devtools/uninstall.sh --dry-run 2>&1)"
+if printf '%s' "$out" | grep -q "desde código: sí" \
+	&& printf '%s' "$out" | grep -q "no se ha tocado nada" \
+	&& [ -x "$fake_root/usr/local/bin/ncam" ] \
+	&& [ -f "$fake_root/var/lib/ncam-ng-panel/panel.db" ]; then r=0; else r=1; fi
+check "el --dry-run muestra el plan y no borra nada" "$r"
+out="$(NCAM_UNINSTALL_ROOT="$fake_root" sh devtools/uninstall.sh --dry-run --daemon-only --purge 2>&1)"
+if printf '%s' "$out" | grep -q "BORRADO TOTAL" \
+	&& printf '%s' "$out" | grep -q "daemon NCam" \
+	&& ! printf '%s' "$out" | grep -q "panel NCPanel"; then r=0; else r=1; fi
+check "el --dry-run --daemon-only --purge limita el plan al daemon" "$r"
+out="$(NCAM_UNINSTALL_ROOT="$fake_root" sh devtools/uninstall.sh --dry-run --panel-only 2>&1)"
+if printf '%s' "$out" | grep -q "panel NCPanel" \
+	&& ! printf '%s' "$out" | grep -q "daemon NCam"; then r=0; else r=1; fi
+check "el --dry-run --panel-only limita el plan al panel" "$r"
+rm -rf "$fake_root"
 
 echo "== análisis de una release real (necesita internet) =="
 if curl -fsSL --connect-timeout 10 -o /dev/null \

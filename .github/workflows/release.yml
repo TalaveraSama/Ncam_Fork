@@ -158,10 +158,22 @@ jobs:
 
             Configuración del panel (campo por campo): [docs/ajustes.md](https://github.com/${{ github.repository }}/blob/${{ steps.version.outputs.tag }}/docs/ajustes.md)
             (también adjunta a esta release y en el servidor, en `/opt/ncam-ng-panel/docs/ajustes.md`).
+
+            ## Desinstalación
+
+            ```bash
+            curl -fsSL -o uninstall.sh \
+              https://github.com/${{ github.repository }}/releases/latest/download/uninstall.sh
+            sudo sh uninstall.sh           # conserva configuración y datos
+            sudo sh uninstall.sh --purge   # borra también configuración, datos y logs
+            ```
+
+            (Con los paquetes instalados también sirve `sudo ncam-ng-uninstall`.)
           files: |
             dist/*.deb
             dist/SHA256SUMS
             devtools/install-deb.sh
+            devtools/uninstall.sh
             INSTALL.md
             docs/ajustes.md
             docs/configuracion-optima.md

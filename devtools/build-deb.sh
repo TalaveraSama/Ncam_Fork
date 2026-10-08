@@ -86,6 +86,8 @@ mkdir -p "$pkg/DEBIAN" "$pkg/usr/bin" "$pkg/etc/ncam" "$pkg/lib/systemd/system" 
 install -m 0755 "$binary" "$pkg/usr/bin/ncam"
 # el instalador de releases, para poder actualizar con un solo comando
 install -m 0755 "$repo_root/devtools/install-deb.sh" "$pkg/usr/bin/ncam-ng-install-deb"
+# el desinstalador (se re-ejecuta desde un temporal para poder borrar su propio paquete)
+install -m 0755 "$repo_root/devtools/uninstall.sh" "$pkg/usr/bin/ncam-ng-uninstall"
 # gestor de servicios y atajos de consola (restart-ncam, restart-ncam-panel...)
 install -m 0755 "$packaging/ncam-ng-ctl.sh" "$pkg/usr/bin/ncam-ng-ctl"
 for alias in restart-ncam restart-ncam-panel ncam-ng-status; do

@@ -463,6 +463,28 @@ esquema v4 añade las columnas de avisos y de consumo de ECM).
 
 ---
 
+## D2. Desinstalar
+
+El desinstalador detecta instalaciones por paquetes `.deb` y desde el código,
+detiene y deshabilita los servicios, y quita los programas. **Sin `--purge`
+conserva** la configuración del daemon (`/etc/ncam`), los logs, la base de
+datos del panel (`/var/lib/ncam-ng-panel`) y el `.env`, y al final te lista lo
+que queda; con `--purge` borra también todo eso y el usuario `ncam-panel`.
+
+```bash
+curl -fsSL -o uninstall.sh \
+  https://github.com/TalaveraSama/Ncam_Fork/releases/latest/download/uninstall.sh
+sudo sh uninstall.sh                 # conserva configuración y datos
+sudo sh uninstall.sh --purge         # borrado total
+sudo sh uninstall.sh --daemon-only   # solo el daemon (o --panel-only para el panel)
+sh uninstall.sh --dry-run            # ver lo que haría, sin tocar nada
+```
+
+Con los paquetes instalados también sirve `sudo ncam-ng-uninstall`
+(viene dentro del paquete `ncam-ng`).
+
+---
+
 ## E. Problemas frecuentes
 
 | Síntoma | Causa y solución |

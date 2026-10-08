@@ -1,5 +1,23 @@
 # Changelog
 
+## [2.4.9] - 2026-10-08 — desinstalador
+
+* Nuevo `devtools/uninstall.sh`: detecta instalaciones por paquetes `.deb`
+  (`ncam-ng`, `ncam-ng-panel`) y desde el código (`/usr/local/bin/ncam`,
+  unidades de systemd manuales), detiene y deshabilita los servicios y quita
+  los programas. Sin opciones **conserva** la configuración (`/etc/ncam`),
+  los logs, la base de datos del panel y el `.env`, y lista lo que queda;
+  `--purge` borra también todo eso y el usuario `ncam-panel`.
+  Opciones `--daemon-only` / `--panel-only`, confirmación interactiva
+  (`--yes` para scripts) y `--dry-run` para ver el plan sin tocar nada.
+* Se publica como adjunto `uninstall.sh` en cada release y además viaja
+  dentro del paquete del daemon como `ncam-ng-uninstall` (se re-ejecuta desde
+  un temporal para poder borrar su propio paquete).
+* Pruebas: 10 nuevas de los instaladores (77 en total), con una instalación
+  simulada en raíz temporal (`NCAM_UNINSTALL_ROOT`) que comprueba el plan del
+  `--dry-run` sin root y sin tocar el sistema.
+* Documentado en [`INSTALL.md`](INSTALL.md) (§D2) y en el texto de la release.
+
 ## [2.4.8] - 2026-10-08 — los peers de caché ya no dan «Error 500»
 
 * **Arreglado: un clic en «Probar» disparaba muchas peticiones a la vez.** La
