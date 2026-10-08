@@ -46,7 +46,7 @@ if [ -z "$BIN" ]; then
 	echo "No hay daemon compilado en Distribution/ (ejecuta ./config.sh ... && make primero)"
 	exit 1
 fi
-if ! strings "$BIN" | grep -q "newcamd: initialized" || ! strings "$BIN" | grep -q "HTTP Server running"; then
+if ! strings "$BIN" | grep -q "newcamd: extended: report card" || ! strings "$BIN" | grep -q "HTTP Server running"; then
 	echo "El binario no trae newcamd+webif: prueba omitida"
 	exit 0
 fi
